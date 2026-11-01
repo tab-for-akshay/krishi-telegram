@@ -1,0 +1,7 @@
+# Design: Krishi Telegram v2
+
+- **Language (R1):** `buildSystemPrompt(lang)` asks for Romanized Hindi/Marathi; `SAFETY_TELEGRAMS[lang]` holds the fixed emergency and KVK telegrams per language. The UI already sends `lang`.
+- **Cause (R2):** the model JSON gains `cause` (string). The worker rejects a reply with no cause and retries on the fallback chain; the telegram starts with the cause. `eval/cases.json` holds 10+ cases `{text, lang, must_any:[...]}`; `eval/run.mjs` posts each to the live `/api/telegram` and checks that the telegram contains at least one `must_any` term.
+- **KVK (R3):** `site/data/kvk.json` is served as a static asset. The worker loads it through the `ASSETS` binding (cached in module scope) and `findKvk(data, state, district)` matches by state, then by district substring in the district field or the address text (case-insensitive). The request body gains `state` and `district`; the response gains `kvk` (`{district, kvk, host, source}` or null). The frontend adds a state `<select>` (filled from kvk.json) and a district input, both remembered in localStorage.
+- **Morse strip (R4):** `renderMorseStrip(morse)` builds spans per symbol; `playMorseAudio` calls back with the index being played so the strip highlights it. Speed shown as WPM from the dot length (PARIS standard: dot ms = 1200 / WPM).
+- **Tests (R5):** `test/kvk.test.mjs`, `test/lang.test.mjs`, `test/eval-shape.test.mjs`.

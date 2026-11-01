@@ -1,0 +1,131 @@
+[
+  {
+    "id": "wheat-yellow-rust",
+    "text": "My wheat leaves have yellow stripe rust and are curling. What should I do?",
+    "lang": "en",
+    "must_any": [
+      "RUST",
+      "FUNGUS",
+      "NEEM"
+    ]
+  },
+  {
+    "id": "rice-blast",
+    "text": "My rice crop has brown spots with grey centres on the leaves — looks like blast disease.",
+    "lang": "en",
+    "must_any": [
+      "BLAST",
+      "FUNGUS"
+    ]
+  },
+  {
+    "id": "cotton-bollworm",
+    "text": "I see small caterpillars inside my cotton bolls. They are destroying the crop.",
+    "lang": "en",
+    "must_any": [
+      "BOLLWORM",
+      "CATERPILLAR",
+      "LARVAE",
+      "NEEM"
+    ]
+  },
+  {
+    "id": "tomato-leaf-curl",
+    "text": "My tomato plants have curling leaves and the fruits are small. The plants look weak.",
+    "lang": "en",
+    "must_any": [
+      "VIRUS",
+      "WHITEFLY",
+      "CURL",
+      "APHID"
+    ]
+  },
+  {
+    "id": "sugarcane-red-rot",
+    "text": "My sugarcane stalks show red discolouration inside when cut. The plants are wilting.",
+    "lang": "en",
+    "must_any": [
+      "RED ROT",
+      "FUNGUS",
+      "FUNGAL",
+      "DISEASE"
+    ]
+  },
+  {
+    "id": "paddy-nitrogen-deficiency",
+    "text": "My paddy plants are pale yellow starting from the lower leaves. Soil looks poor.",
+    "lang": "en",
+    "must_any": [
+      "NITROGEN"
+    ]
+  },
+  {
+    "id": "soybean-aphid-hi",
+    "text": "Meri soybean ki patiyon par bahut chote keede hain jo ras choos rahe hain.",
+    "lang": "hi",
+    "must_any": [
+      "APHID",
+      "NEEM",
+      "INSECT",
+      "KEED",
+      "CHUSAK",
+      "RAS"
+    ]
+  },
+  {
+    "id": "onion-purple-blotch",
+    "text": "My onion crop has purple or violet spots on the leaves with yellow halos.",
+    "lang": "en",
+    "must_any": [
+      "PURPLE BLOTCH",
+      "FUNGUS",
+      "FUNGAL",
+      "BLOTCH"
+    ]
+  },
+  {
+    "id": "maize-stalk-borer-mr",
+    "text": "Majhya makkyachya khodyat kide ahet ani paan peetsar hotat.",
+    "lang": "mr",
+    "must_any": [
+      "BORER",
+      "STALK",
+      "KIDE",
+      "LARVAE"
+    ]
+  },
+  {
+    "id": "groundnut-tikka",
+    "text": "My groundnut leaves have dark brown circular spots with yellow halos — is this tikka disease?",
+    "lang": "en",
+    "must_any": [
+      "TIKKA",
+      "CERCOSPORA",
+      "LEAF SPOT",
+      "FUNGUS"
+    ]
+  },
+  {
+    "id": "banana-panama-wilt",
+    "text": "My banana plants have yellowing and wilting leaves starting from the outer leaves inward.",
+    "lang": "en",
+    "must_any": [
+      "PANAMA",
+      "FUSARIUM",
+      "WILT",
+      "FUNGAL",
+      "SOIL"
+    ]
+  },
+  {
+    "id": "chilli-anthracnose",
+    "text": "My chilli fruits have dark sunken spots and are rotting on the plant before harvest.",
+    "lang": "en",
+    "must_any": [
+      "ANTHRACNOSE",
+      "FRUIT ROT",
+      "FUNGUS",
+      "HARVEST"
+    ]
+  }
+]
