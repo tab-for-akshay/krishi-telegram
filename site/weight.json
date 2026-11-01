@@ -1,0 +1,23 @@
+{
+  "assets": [
+    {
+      "asset": "index.html",
+      "raw_bytes": 12069,
+      "gzip_bytes": 3627
+    },
+    {
+      "asset": "app.js",
+      "raw_bytes": 24133,
+      "gzip_bytes": 6020
+    },
+    {
+      "asset": "styles.css",
+      "raw_bytes": 21616,
+      "gzip_bytes": 4102
+    }
+  ],
+  "total_raw_bytes": 57818,
+  "total_gzip_bytes": 13749,
+  "gzip_kb": 14,
+  "generated": "2026-11-01T20:26:15.737Z"
+}

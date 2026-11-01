@@ -1,0 +1,14 @@
+{
+  "name": "safety-floor-guard",
+  "description": "Run safety-guard tests whenever site/worker.mjs is saved — ensures the safety floor is intact",
+  "trigger": {
+    "event": "file_save",
+    "pattern": "site/worker.mjs"
+  },
+  "steps": [
+    {
+      "name": "Run safety guard tests",
+      "command": "node --test test/safety-guard.test.mjs"
+    }
+  ]
+}
