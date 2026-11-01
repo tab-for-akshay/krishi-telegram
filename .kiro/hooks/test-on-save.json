@@ -1,0 +1,14 @@
+{
+  "name": "test-on-save",
+  "description": "Run Node tests whenever a file in site/ is saved",
+  "trigger": {
+    "event": "file_save",
+    "pattern": "site/**"
+  },
+  "steps": [
+    {
+      "name": "Run tests",
+      "command": "node --test"
+    }
+  ]
+}

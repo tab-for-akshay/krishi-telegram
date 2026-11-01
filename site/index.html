@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Krishi Telegram — AI farm advisory in the style of India's vintage telegraph service" />
+  <title>Krishi Telegram</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Ambient ghost overlay -->
+  <div class="kt-ghost-overlay" aria-hidden="true">
+    <svg class="kt-ghost-svg" viewBox="0 0 120 160" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <ellipse cx="60" cy="75" rx="40" ry="50" fill="rgba(200,230,210,0.12)" />
+      <ellipse cx="60" cy="65" rx="28" ry="34" fill="rgba(200,230,210,0.10)" />
+      <!-- eyes -->
+      <ellipse cx="48" cy="62" rx="5" ry="6" fill="rgba(100,160,120,0.25)" />
+      <ellipse cx="72" cy="62" rx="5" ry="6" fill="rgba(100,160,120,0.25)" />
+      <!-- wavy bottom -->
+      <path d="M20 125 Q30 118 40 125 Q50 132 60 125 Q70 118 80 125 Q90 132 100 125 L100 155 L20 155 Z"
+            fill="rgba(200,230,210,0.10)" />
+    </svg>
+  </div>
+
+  <!-- Candle decoration -->
+  <div class="kt-candle" aria-hidden="true">
+    <div class="kt-flame"></div>
+    <div class="kt-candle-body"></div>
+  </div>
+
+  <div class="kt-page">
+
+    <header class="kt-header">
+      <p class="kt-header-sub">— भारत सरकार टेलीग्राफ विभाग —</p>
+      <h1 class="kt-title">KRISHI TELEGRAM</h1>
+      <p class="kt-header-tagline">Farm Advisory by Electric Telegraph &middot; Est. 2026</p>
+    </header>
+
+    <main class="kt-main" id="main-content">
+
+      <section class="kt-form-card" aria-label="Send a farm advisory telegram">
+        <h2 class="kt-form-title">COMPOSE YOUR TELEGRAM</h2>
+        <p class="kt-form-hint">
+          Describe your crop problem in English, हिन्दी, or मराठी.
+          You will receive a crisp 20-word advisory — just like the old telegram service.
+        </p>
+
+        <form id="telegram-form" novalidate>
+          <div class="kt-field">
+            <label class="kt-label" for="question">Your farm question</label>
+            <textarea
+              id="question"
+              name="question"
+              class="kt-textarea"
+              rows="5"
+              maxlength="2000"
+              placeholder="E.g. My wheat leaves have yellow spots and are curling. What should I do?"
+              required
+              aria-required="true"
+              aria-describedby="question-hint"
+            ></textarea>
+            <p class="kt-field-hint" id="question-hint">
+              Maximum 2000 characters. Message will be kept confidential.
+            </p>
+          </div>
+
+          <div class="kt-field kt-field--inline">
+            <label class="kt-label" for="lang">Language / भाषा</label>
+            <select id="lang" name="lang" class="kt-select" aria-label="Select language">
+              <option value="en">English</option>
+              <option value="hi">हिन्दी (Hindi)</option>
+              <option value="mr">मराठी (Marathi)</option>
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            id="send-btn"
+            class="kt-btn kt-btn--primary"
+            aria-label="Send telegram"
+          >
+            &#9993; SEND TELEGRAM
+          </button>
+        </form>
+      </section>
+
+      <!-- Result area — hidden until response -->
+      <section
+        id="result"
+        class="kt-result"
+        aria-live="polite"
+        aria-atomic="true"
+        hidden
+      >
+
+        <!-- Loading state -->
+        <div id="loading" class="kt-loading" hidden aria-label="Sending telegram, please wait">
+          <span class="kt-dots">&#9679;&#9679;&#9679;</span>
+          <p>Transmitting over the wire&hellip;</p>
+        </div>
+
+        <!-- Error state -->
+        <div id="error-msg" class="kt-error" hidden role="alert"></div>
+
+        <!-- Telegram card -->
+        <article id="telegram-card" class="kt-telegram" hidden aria-label="Received telegram">
+
+          <div class="kt-telegram-header">
+            <span class="kt-telegram-office">KRISHI TELEGRAPH OFFICE</span>
+            <span class="kt-stamp" aria-label="Received stamp">RECEIVED</span>
+          </div>
+
+          <dl class="kt-telegram-meta">
+            <div class="kt-meta-row">
+              <dt>TO:</dt>
+              <dd>FARMER IN FIELD</dd>
+            </div>
+            <div class="kt-meta-row">
+              <dt>FROM:</dt>
+              <dd>KRISHI TELEGRAM SERVICE</dd>
+            </div>
+            <div class="kt-meta-row">
+              <dt>DATE:</dt>
+              <dd id="telegram-date"></dd>
+            </div>
+          </dl>
+
+          <div class="kt-telegram-divider" aria-hidden="true">&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;</div>
+
+          <p id="telegram-body" class="kt-telegram-body"></p>
+
+          <div class="kt-telegram-divider" aria-hidden="true">&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;</div>
+
+          <p class="kt-telegram-cost">
+            <span id="telegram-words"></span> words &mdash;
+            Cost: <strong id="telegram-cost"></strong>
+          </p>
+
+          <div class="kt-telegram-actions">
+            <button
+              id="play-morse"
+              class="kt-btn kt-btn--morse"
+              aria-label="Play Morse code audio"
+              hidden
+            >
+              &#9654; PLAY MORSE
+            </button>
+            <button
+              id="stop-morse"
+              class="kt-btn kt-btn--morse"
+              aria-label="Stop Morse code audio"
+              hidden
+            >
+              &#9646;&#9646; STOP
+            </button>
+            <button
+              id="print-btn"
+              class="kt-btn kt-btn--print"
+              aria-label="Print this telegram"
+            >
+              &#128438; PRINT TELEGRAM
+            </button>
+          </div>
+
+        </article>
+
+      </section>
+
+    </main>
+
+    <footer class="kt-footer">
+      <p class="kt-footer-disclaimer">
+        This service provides general farm advisory information only.
+        For emergencies, call <strong>108</strong> or <strong>112</strong>.
+        Tele-MANAS: <strong>14416</strong>.
+      </p>
+      <p class="kt-footer-attribution">
+        Built by Tab, an AI assistant, using Kiro, for team lead Akshay Wagh.
+      </p>
+      <p class="kt-footer-legal">
+        &copy; 2026 Krishi Telegram &middot; MIT Licence &middot; Kiroween Hackathon
+      </p>
+    </footer>
+
+  </div><!-- .kt-page -->
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,632 @@
+/* ==========================================================================
+   Krishi Telegram — styles.css
+   Sepia / ghostly / vintage telegraph-office theme
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Design tokens
+   -------------------------------------------------------------------------- */
+:root {
+  --kt-paper: #f5e6c8;
+  --kt-paper-dark: #e8d4a8;
+  --kt-paper-edge: #c8aa78;
+  --kt-ink: #2a1a0a;
+  --kt-ink-light: #5a3a1a;
+  --kt-red: #8b0000;
+  --kt-red-faded: rgba(139, 0, 0, 0.15);
+  --kt-ghost: rgba(200, 230, 210, 0.12);
+  --kt-bg: #1a0f05;
+  --kt-bg-mid: #2d1f0e;
+  --kt-candle: #ffaa22;
+  --kt-candle-glow: rgba(255, 170, 34, 0.35);
+  --kt-font-body: 'Courier New', Courier, monospace;
+  --kt-font-heading: Georgia, 'Times New Roman', serif;
+  --kt-radius: 2px;
+  --kt-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  --kt-focus: #4a90d9;
+}
+
+/* --------------------------------------------------------------------------
+   Reset & base
+   -------------------------------------------------------------------------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--kt-bg);
+  color: var(--kt-ink);
+  font-family: var(--kt-font-body);
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* --------------------------------------------------------------------------
+   Ghost overlay
+   -------------------------------------------------------------------------- */
+.kt-ghost-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(40vw, 300px);
+  height: 100vh;
+  pointer-events: none;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kt-ghost-svg {
+  width: 100%;
+  height: auto;
+  animation: kt-ghost-float 6s ease-in-out infinite;
+}
+
+@keyframes kt-ghost-float {
+  0%, 100% { transform: translateY(0) scale(1);   opacity: 0.7; }
+  50%       { transform: translateY(-20px) scale(1.04); opacity: 1; }
+}
+
+/* --------------------------------------------------------------------------
+   Candle
+   -------------------------------------------------------------------------- */
+.kt-candle {
+  position: fixed;
+  bottom: 80px;
+  left: 32px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.kt-candle-body {
+  width: 18px;
+  height: 60px;
+  background: linear-gradient(to bottom, #f0e0b0, #d4b870, #b89040);
+  border-radius: 2px 2px 0 0;
+  margin: 0 auto;
+}
+
+.kt-flame {
+  width: 14px;
+  height: 26px;
+  background: radial-gradient(ellipse at 50% 80%, var(--kt-candle) 30%, #ff6600 70%, transparent 100%);
+  border-radius: 50% 50% 20% 20%;
+  margin: 0 auto 2px;
+  animation: kt-flicker 1.4s ease-in-out infinite;
+  transform-origin: bottom center;
+  box-shadow: 0 0 18px 8px var(--kt-candle-glow), 0 0 40px 20px rgba(255, 100, 0, 0.15);
+}
+
+@keyframes kt-flicker {
+  0%   { transform: scaleX(1)    scaleY(1)    rotate(-1deg); opacity: 0.95; }
+  20%  { transform: scaleX(0.92) scaleY(1.08) rotate(2deg);  opacity: 1;    }
+  40%  { transform: scaleX(1.05) scaleY(0.96) rotate(-2deg); opacity: 0.9;  }
+  60%  { transform: scaleX(0.95) scaleY(1.04) rotate(1deg);  opacity: 1;    }
+  80%  { transform: scaleX(1.03) scaleY(0.97) rotate(-1deg); opacity: 0.88; }
+  100% { transform: scaleX(1)    scaleY(1)    rotate(0deg);  opacity: 0.95; }
+}
+
+/* --------------------------------------------------------------------------
+   Page layout
+   -------------------------------------------------------------------------- */
+.kt-page {
+  position: relative;
+  z-index: 2;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+/* --------------------------------------------------------------------------
+   Header
+   -------------------------------------------------------------------------- */
+.kt-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+  color: var(--kt-paper);
+}
+
+.kt-header-sub {
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  opacity: 0.7;
+  margin-bottom: 0.4rem;
+}
+
+.kt-title {
+  font-family: var(--kt-font-heading);
+  font-size: clamp(2rem, 8vw, 3.5rem);
+  letter-spacing: 0.08em;
+  text-shadow:
+    0 0 20px var(--kt-candle-glow),
+    0 2px 8px rgba(0, 0, 0, 0.8);
+  color: var(--kt-paper);
+  margin-bottom: 0.4rem;
+}
+
+.kt-header-tagline {
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+}
+
+/* --------------------------------------------------------------------------
+   Form card
+   -------------------------------------------------------------------------- */
+.kt-form-card {
+  background: var(--kt-paper);
+  border: 1px solid var(--kt-paper-edge);
+  border-radius: var(--kt-radius);
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: var(--kt-shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Faint aged-paper texture */
+.kt-form-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 28px,
+      rgba(90, 58, 26, 0.04) 28px,
+      rgba(90, 58, 26, 0.04) 29px
+    );
+  pointer-events: none;
+}
+
+.kt-form-title {
+  font-family: var(--kt-font-heading);
+  font-size: 1.1rem;
+  letter-spacing: 0.12em;
+  color: var(--kt-ink);
+  border-bottom: 2px solid var(--kt-paper-edge);
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.kt-form-hint {
+  font-size: 0.85rem;
+  color: var(--kt-ink-light);
+  margin-bottom: 1.25rem;
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------------------------------
+   Form fields
+   -------------------------------------------------------------------------- */
+.kt-field {
+  margin-bottom: 1.25rem;
+}
+
+.kt-field--inline {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.kt-label {
+  display: block;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  color: var(--kt-ink-light);
+  margin-bottom: 0.35rem;
+  text-transform: uppercase;
+  font-weight: bold;
+}
+
+.kt-field--inline .kt-label {
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.kt-textarea,
+.kt-select {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--kt-paper-edge);
+  border-radius: var(--kt-radius);
+  padding: 0.6rem 0.8rem;
+  font-family: var(--kt-font-body);
+  font-size: 0.95rem;
+  color: var(--kt-ink);
+  resize: vertical;
+}
+
+.kt-select {
+  width: auto;
+  cursor: pointer;
+}
+
+.kt-textarea:focus,
+.kt-select:focus {
+  outline: 3px solid var(--kt-focus);
+  outline-offset: 2px;
+  border-color: var(--kt-focus);
+}
+
+.kt-field-hint {
+  font-size: 0.75rem;
+  color: var(--kt-ink-light);
+  margin-top: 0.3rem;
+}
+
+/* --------------------------------------------------------------------------
+   Buttons
+   -------------------------------------------------------------------------- */
+.kt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.65rem 1.4rem;
+  border: 2px solid currentColor;
+  border-radius: var(--kt-radius);
+  font-family: var(--kt-font-body);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  text-transform: uppercase;
+  min-height: 44px; /* touch target */
+}
+
+.kt-btn:focus-visible {
+  outline: 3px solid var(--kt-focus);
+  outline-offset: 3px;
+}
+
+.kt-btn--primary {
+  background: var(--kt-ink);
+  color: var(--kt-paper);
+  border-color: var(--kt-ink);
+  margin-top: 0.5rem;
+}
+
+.kt-btn--primary:hover {
+  background: var(--kt-ink-light);
+  border-color: var(--kt-ink-light);
+}
+
+.kt-btn--primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.kt-btn--morse {
+  background: transparent;
+  color: var(--kt-ink);
+  border-color: var(--kt-ink-light);
+  font-size: 0.8rem;
+}
+
+.kt-btn--morse:hover {
+  background: var(--kt-paper-dark);
+}
+
+.kt-btn--print {
+  background: transparent;
+  color: var(--kt-ink-light);
+  border-color: var(--kt-paper-edge);
+  font-size: 0.8rem;
+}
+
+.kt-btn--print:hover {
+  background: var(--kt-paper-dark);
+}
+
+/* --------------------------------------------------------------------------
+   Loading
+   -------------------------------------------------------------------------- */
+.kt-loading {
+  text-align: center;
+  color: var(--kt-paper);
+  padding: 2rem;
+}
+
+.kt-dots {
+  display: inline-block;
+  font-size: 1.5rem;
+  animation: kt-pulse 1s ease-in-out infinite;
+  letter-spacing: 0.4em;
+}
+
+@keyframes kt-pulse {
+  0%, 100% { opacity: 0.3; }
+  50%       { opacity: 1;   }
+}
+
+/* --------------------------------------------------------------------------
+   Error
+   -------------------------------------------------------------------------- */
+.kt-error {
+  background: var(--kt-red-faded);
+  border: 1px solid var(--kt-red);
+  color: var(--kt-paper);
+  padding: 1rem 1.25rem;
+  border-radius: var(--kt-radius);
+  font-size: 0.9rem;
+}
+
+/* --------------------------------------------------------------------------
+   Telegram card
+   -------------------------------------------------------------------------- */
+.kt-telegram {
+  background: linear-gradient(
+    160deg,
+    var(--kt-paper) 0%,
+    var(--kt-paper-dark) 60%,
+    #d8c098 100%
+  );
+  border: 1px solid var(--kt-paper-edge);
+  border-radius: var(--kt-radius);
+  padding: 2rem;
+  box-shadow:
+    var(--kt-shadow),
+    inset 0 0 40px rgba(90, 58, 26, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Torn-paper top edge illusion */
+.kt-telegram::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--kt-paper-edge) 0px,
+    var(--kt-paper) 2px,
+    var(--kt-paper-dark) 4px,
+    var(--kt-paper-edge) 6px
+  );
+}
+
+/* Aged-paper line texture */
+.kt-telegram::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 23px,
+      rgba(90, 58, 26, 0.06) 23px,
+      rgba(90, 58, 26, 0.06) 24px
+    );
+  pointer-events: none;
+}
+
+.kt-telegram-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+  padding-top: 0.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.kt-telegram-office {
+  font-family: var(--kt-font-heading);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  color: var(--kt-ink-light);
+  text-transform: uppercase;
+}
+
+.kt-stamp {
+  display: inline-block;
+  border: 2px solid var(--kt-red);
+  color: var(--kt-red);
+  font-family: var(--kt-font-heading);
+  font-size: 0.7rem;
+  font-weight: bold;
+  letter-spacing: 0.14em;
+  padding: 0.15rem 0.5rem;
+  transform: rotate(-8deg);
+  opacity: 0.75;
+  text-transform: uppercase;
+}
+
+.kt-telegram-meta {
+  font-size: 0.78rem;
+  color: var(--kt-ink-light);
+  margin-bottom: 0.75rem;
+  position: relative;
+  z-index: 1;
+}
+
+.kt-meta-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+}
+
+.kt-meta-row dt {
+  font-weight: bold;
+  min-width: 3.5rem;
+}
+
+.kt-telegram-divider {
+  color: var(--kt-paper-edge);
+  letter-spacing: -0.05em;
+  font-size: 0.75rem;
+  margin: 0.75rem 0;
+  overflow: hidden;
+  white-space: nowrap;
+  position: relative;
+  z-index: 1;
+}
+
+.kt-telegram-body {
+  font-family: var(--kt-font-body);
+  font-size: 1.05rem;
+  font-weight: bold;
+  color: var(--kt-ink);
+  line-height: 1.7;
+  letter-spacing: 0.05em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  position: relative;
+  z-index: 1;
+  text-transform: uppercase;
+}
+
+.kt-telegram-cost {
+  font-size: 0.78rem;
+  color: var(--kt-ink-light);
+  margin-top: 0.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.kt-telegram-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  position: relative;
+  z-index: 1;
+}
+
+/* --------------------------------------------------------------------------
+   Footer
+   -------------------------------------------------------------------------- */
+.kt-footer {
+  margin-top: 3rem;
+  text-align: center;
+  color: rgba(245, 230, 200, 0.45);
+  font-size: 0.75rem;
+  line-height: 1.8;
+}
+
+.kt-footer-disclaimer {
+  color: rgba(245, 230, 200, 0.55);
+  margin-bottom: 0.3rem;
+}
+
+.kt-footer-attribution {
+  color: rgba(245, 230, 200, 0.65);
+  font-style: italic;
+}
+
+.kt-footer strong {
+  color: rgba(245, 230, 200, 0.8);
+}
+
+/* --------------------------------------------------------------------------
+   Utility
+   -------------------------------------------------------------------------- */
+[hidden] {
+  display: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive — 390 px
+   -------------------------------------------------------------------------- */
+@media (max-width: 430px) {
+  .kt-page {
+    padding: 1.25rem 1rem 3rem;
+  }
+
+  .kt-title {
+    font-size: 2rem;
+  }
+
+  .kt-form-card,
+  .kt-telegram {
+    padding: 1.25rem;
+  }
+
+  .kt-field--inline {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .kt-select {
+    width: 100%;
+  }
+
+  .kt-candle {
+    display: none;
+  }
+
+  .kt-ghost-overlay {
+    width: 50vw;
+    opacity: 0.5;
+  }
+
+  .kt-telegram-actions {
+    flex-direction: column;
+  }
+
+  .kt-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .kt-meta-row {
+    flex-direction: column;
+    gap: 0;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Print stylesheet
+   -------------------------------------------------------------------------- */
+@media print {
+  body {
+    background: white;
+    color: #000;
+  }
+
+  .kt-ghost-overlay,
+  .kt-candle,
+  .kt-header,
+  .kt-form-card,
+  .kt-telegram-actions,
+  .kt-footer {
+    display: none !important;
+  }
+
+  .kt-page {
+    max-width: 100%;
+    padding: 0;
+  }
+
+  .kt-telegram {
+    background: white;
+    border: 2px solid #888;
+    box-shadow: none;
+    padding: 1.5cm;
+    break-inside: avoid;
+  }
+
+  .kt-telegram::before,
+  .kt-telegram::after {
+    display: none;
+  }
+
+  .kt-stamp {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "krishi-telegram",
+  "version": "1.0.0",
+  "description": "Krishi Telegram — AI farm advisory telegraph. Kiroween 2026 Hackathon, RESURRECTION category.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "keywords": ["cloudflare-workers", "telegram", "farming", "groq", "kiroween"],
+  "author": "Tab (AI assistant), for Akshay Wagh",
+  "license": "MIT"
+}
