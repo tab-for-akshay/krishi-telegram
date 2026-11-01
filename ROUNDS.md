@@ -9,7 +9,7 @@ Scores v1 — Fo: Impact 6, Implementation 6, Design 7, Innovation 5, Presentati
 
 Top changes taken into v2:
 1. **Reply in the farmer's language** (Fo): Hindi/Marathi telegrams in Roman letters; per-language safety telegrams; English-reply guard with one retry; Marathi routed to the model that wrote it best in our A/B test (gemini-3.5-flash; gpt-oss failed JSON validation on Romanized Marathi).
-2. **Real KVK referral from a public dataset** (Fo): ICAR's Krishi Vigyan Kendra list for every state (708 KVKs, `site/data/kvk.json`, source page + fetch date). A dose question now says e.g. "KVK AKOLA SE SAMPARK KAREN" and shows that KVK's address and host institution.
+2. **Real KVK referral from a public dataset** (Fo): ICAR's Krishi Vigyan Kendra list by state (708 KVKs listed on the page; India has 731 in all per PIB, `site/data/kvk.json`, source page + fetch date). A dose question now says e.g. "KVK AKOLA SE SAMPARK KAREN" and shows that KVK's address and host institution.
 3. **No more filler advice** (Fo caught "apply organic fertilizer" for tomato leaf curl): the model must name a specific cause first; the prompt walks common pests, insect-spread viruses and diseases before deficiencies. New 12-case eval set (`eval/cases.json`, `node eval/run.mjs <url>`): 9–11 of 12 pass on the live site across runs.
 4. **Morse you can see** (Fo): a dots-and-dashes strip highlighted in sync with the audio, plus WPM.
 5. **Safety floor gap found while testing v2** (Tab): "my brother drank pesticide" did not trip the v1 floor. Added ingestion phrasing in English, Hinglish and Marathi (drank/pi liya/pyayla + pesticide/keetnaashak/zeher/vish), with tests.
