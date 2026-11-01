@@ -1,6 +1,6 @@
 /**
  * Krishi Telegram — Cloudflare Worker
- * Serves static assets and exposes POST /api/telegram
+ * Serves static assets and the API. Branch `otari`: every model call goes through Otari (otari.ai).
  */
 
 // ---------------------------------------------------------------------------
@@ -169,102 +169,248 @@ export function findKvk(kvkData, state, district) {
 }
 
 // ---------------------------------------------------------------------------
-// Groq API call
+// Otari gateway (hackathon branch `otari`)
+//
+// Before this branch the worker called Groq and Gemini directly with a
+// hand-written fallback chain and per-language model routing. Every model call
+// now goes through Mozilla's Otari gateway (https://otari.ai) with ONE key:
+//   * routing policies own model choice + failover (krishi-diagnose, ...)
+//   * a monthly spend ceiling on the key + a budget tier-down inside the policy
+//   * a per-farmer daily budget (service key + end users)
+//   * Otari web search for sources, Otari code execution for field maths
+//   * an MCP server (our own KVK directory) that Otari calls for the model
+//   * an organisation guardrail (our safety floor, served at /guard/validate)
+//   * a second, private route: Tab's self-hosted abliterated open model,
+//     registered in Otari as an org provider key (llamacpp)
 // ---------------------------------------------------------------------------
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
-const PRIMARY_MODEL = 'openai/gpt-oss-120b';
-const FALLBACK_MODEL = 'openai/gpt-oss-20b';
+const OTARI_BASE = 'https://otari.ai/api/v1';
+const SECRETS = {}; // filled at publish time only (never committed)
+export const POLICY = {
+  diagnose: 'krishi-diagnose',   // Qwen3.5-35B-A3B -> Llama-3.3-70B -> Gemma-3-27B; tier-down to Gemma at 80% budget
+  telegraph: 'krishi-telegraph', // Gemma-3-27B -> Gemma-3-12B -> Llama-3.3-70B (Roman Hindi / Marathi writer)
+  judge: 'krishi-judge',         // Qwen3Guard-Gen-8B -> Llama-Guard-4-12B (safety judge on the advice)
+  calc: 'krishi-calc',           // Qwen3.5-35B-A3B + otari_code_execution
+  locate: 'krishi-calc',         // same tool-capable model, calls our KVK MCP server through Otari
+  research: 'krishi-calc',       // same model + otari_web_search
+};
+export const PRIVATE_MODEL = 'llamacpp:huihui-qwythos-9b-abliterated-q4k';
+const PRIVATE_HEALTH = 'https://tab-llm-p76jwv764jr9crggw-8080.app.github.dev/health';
+
+function secret(env, k) { return (env && env[k]) || SECRETS[k] || ''; }
+
+async function sha16(s) {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(s)));
+  return [...new Uint8Array(d)].slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+export async function farmerUser(farmerId) {
+  const id = String(farmerId || '').slice(0, 80);
+  return id ? 'farmer:' + (await sha16('krishi|' + id)) : 'farmer:anonymous';
+}
+
+/**
+ * One Otari chat call. Returns { ok, status, data, content, trace, error }.
+ * trace is what Otari told us in its response headers: which real model
+ * served the policy, whether a fallback ran, attempts, latency and cost.
+ */
+export async function otari(env, body, { role, user, timeoutMs = 27000, extraHeaders = {}, tags = {} } = {}) {
+  const key = secret(env, 'OTARI_KEY');
+  const t0 = Date.now();
+  const trace = { role, requested: body.model };
+  if (!key) return { ok: false, status: 503, error: 'OTARI_KEY not configured', trace };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let res;
+  try {
+    res = await fetch(OTARI_BASE + '/chat/completions', {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key, ...extraHeaders },
+      body: JSON.stringify({ ...body, ...(user ? { user } : {}), metadata: { app: 'krishi-telegram', role, ...tags } }),
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    trace.ms = Date.now() - t0; trace.error = e.name === 'AbortError' ? 'timeout' : 'network';
+    return { ok: false, status: 0, error: trace.error, trace };
+  }
+  clearTimeout(timer);
+  const h = n => res.headers.get(n);
+  Object.assign(trace, {
+    status: res.status,
+    served: h('Otari-Provider') ? `${h('Otari-Provider')}:${h('Otari-Model')}` : null,
+    fallback: h('Otari-Fallback') === 'true',
+    attempts: Number(h('Otari-Attempt-Count') || 0) || null,
+    request_id: h('Otari-Request-ID'),
+    guardrails: h('Otari-Guardrails') || null,
+    end_user_budget: h('Otari-End-User-Budget') ? true : undefined,
+    error_code: h('Otari-Error-Code') || undefined,
+  });
+  let data = null; let text = '';
+  try { text = await res.text(); data = JSON.parse(text); } catch { data = null; }
+  trace.ms = Date.now() - t0;
+  if (!res.ok || !data) {
+    trace.error = (data && (data.detail || data.error?.message)) || `HTTP ${res.status}`;
+    if (typeof trace.error !== 'string') trace.error = JSON.stringify(trace.error).slice(0, 200);
+    return { ok: false, status: res.status, data, error: trace.error, trace };
+  }
+  trace.cost_usd = data.usage?.cost_usd ? Number(data.usage.cost_usd) : null;
+  trace.tokens = data.usage?.total_tokens ?? null;
+  const content = data.choices?.[0]?.message?.content || '';
+  return { ok: true, status: res.status, data, content, trace };
+}
+
+/** Streaming variant, used for the slow private model (keeps bytes flowing). */
+export async function otariStream(env, body, { role, user, timeoutMs = 90000 } = {}) {
+  const key = secret(env, 'OTARI_KEY');
+  const t0 = Date.now();
+  const trace = { role, requested: body.model, stream: true };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(OTARI_BASE + '/chat/completions', {
+      method: 'POST', signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+      body: JSON.stringify({ ...body, stream: true, stream_options: { include_usage: true }, ...(user ? { user } : {}), metadata: { app: 'krishi-telegram', role } }),
+    });
+    const h = n => res.headers.get(n);
+    Object.assign(trace, { status: res.status, served: h('Otari-Provider') ? `${h('Otari-Provider')}:${h('Otari-Model')}` : null, request_id: h('Otari-Request-ID'), fallback: h('Otari-Fallback') === 'true' });
+    if (!res.ok || !res.body) { trace.error = `HTTP ${res.status}`; trace.ms = Date.now() - t0; return { ok: false, status: res.status, error: trace.error, trace }; }
+    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = ''; let content = '';
+    for (;;) {
+      const { done, value } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i; while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line.startsWith('data:') || line === 'data: [DONE]') continue;
+        try { const j = JSON.parse(line.slice(5)); for (const c of j.choices || []) content += c.delta?.content || ''; if (j.usage?.cost_usd) trace.cost_usd = Number(j.usage.cost_usd); } catch { /* keep-alive */ }
+      }
+    }
+    clearTimeout(timer); trace.ms = Date.now() - t0;
+    return { ok: !!content, status: res.status, content, trace, error: content ? undefined : 'empty' };
+  } catch (e) {
+    clearTimeout(timer); trace.ms = Date.now() - t0; trace.error = e.name === 'AbortError' ? 'timeout' : 'network';
+    return { ok: false, status: 0, error: trace.error, trace };
+  }
+}
+
+export function parseJsonLoose(s) {
+  if (!s) return null;
+  const t = String(s).replace(/^```(json)?/m, '').replace(/```\s*$/m, '').trim();
+  try { return JSON.parse(t); } catch { /* fall through */ }
+  const a = t.indexOf('{'); const b = t.lastIndexOf('}');
+  if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch { return null; } }
+  return null;
+}
+
+export function telegramWords(t) { return String(t).toUpperCase().split(/\s+/).filter(w => w !== 'STOP' && w.length > 0).length; }
+export function cleanTelegram(t) {
+  return String(t || '').toUpperCase().replace(/[^A-Z0-9 \-]/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
 const LANG_NAMES = { en: 'English', hi: 'Hindi', mr: 'Marathi' };
-const LANG_SCRIPT_NOTE = {
-  en: '',
-  hi: ' Write the telegram in Hindi but use ROMAN LETTERS ONLY (A-Z, digits, spaces) — no Devanagari script. This is required so it can be transmitted as Morse code.',
-  mr: ' Write the telegram in Marathi but use ROMAN LETTERS ONLY (A-Z, digits, spaces) — no Devanagari script. This is required so it can be transmitted as Morse code.',
-};
 
-function buildSystemPrompt(lang) {
-  const langName = LANG_NAMES[lang] || 'English';
-  const langRule = lang === 'hi'
-    ? 'Write the telegram in HINDI using Roman letters (Hinglish spelling), NOT in English, e.g. "SAFED MAKKHI SE PATTA MOD VIRUS STOP PRABHAVIT PAUDHE UKHADEN STOP PEELA CHIPCHIPA TRAP LAGAYEN STOP". '
-    : lang === 'mr'
-    ? 'Write the telegram in MARATHI using Roman letters, NOT in English, e.g. "PANDHRYA MASHIMULE PAN GUNDALNE VIRUS STOP BADHIT ROPE UPTUN TAKA STOP PIVLE CHIKAT SAPLE LAVA STOP". '
-    : 'Write the telegram in plain English. ';
-  return (
-    'You are a terse Indian agricultural telegram service from the 1960s, advising smallholder farmers. ' +
-    'The farmer chose ' + langName + '. ' + langRule +
-    'Use only letters A-Z, digits and spaces (no Devanagari, no punctuation). ' +
-    'Respond ONLY with a JSON object with exactly three keys: "telegram" (string), "words" (number) and "cause" (string, in English). ' +
-    'First decide the single most likely cause for the symptoms in Indian field conditions: think of the common pests, viral diseases spread by insects (for example leaf curl virus spread by whitefly when leaves curl in tomato, chilli or cotton), fungal and bacterial diseases, and only then nutrient deficiency or water stress. Name it specifically in "cause". ' +
-    'The telegram must be ALL UPPERCASE, use STOP to separate sentences, contain at most 20 content words (STOPs do not count), and begin with the cause. ' +
-    'Give practical, safe, low-cost actions (cultural, mechanical, biological, sticky traps, neem-based, removing infected plants, seeking KVK confirmation). ' +
-    'Do NOT mention any chemical pesticide or fungicide names, doses or compounds. ' +
-    'Do NOT include self-harm or emergency information; that is handled separately. ' +
-    (lang === 'hi'
-      ? 'Example: {"telegram":"SAFED MAKKHI SE PATTA MOD VIRUS STOP MUDE PAUDHE UKHAADEN STOP PEELE CHIPCHIPE TRAP LAGAYEN STOP NEEM TEL CHHIDKEN STOP","words":16,"cause":"LEAF CURL VIRUS (WHITEFLY)"}. Every word except STOP, KVK and numbers must be Hindi.'
-      : lang === 'mr'
-      ? 'Example: {"telegram":"PANDHRI MASHI PAN GUNDALNE VIRUS STOP GUNDALLELI ROPE UPTUN TAKA STOP PIVLE CHIKAT SAPLE LAVA STOP NEEM TEL FAVARA STOP","words":16,"cause":"LEAF CURL VIRUS (WHITEFLY)"}. Every word except STOP, KVK and numbers must be Marathi.'
-      : 'Example: {"telegram":"WHITEFLY LEAF CURL VIRUS STOP UPROOT CURLED PLANTS STOP SET YELLOW STICKY TRAPS STOP SPRAY NEEM OIL STOP","words":14,"cause":"LEAF CURL VIRUS (WHITEFLY)"}')
-  );
+// Role 1 — diagnose (English, structured). Open-weight reasoning model via policy.
+export function diagnosePrompt() {
+  return 'You are an Indian agricultural extension officer advising a smallholder farmer by telegram. ' +
+    'First decide the single most likely cause of the symptoms in Indian field conditions: consider common insect pests, viral diseases spread by insects ' +
+    '(for example leaf curl virus spread by whitefly when leaves curl in tomato, chilli or cotton), fungal and bacterial diseases, and only then nutrient deficiency or water stress. ' +
+    'Give practical, safe, low-cost actions: cultural, mechanical, biological, sticky traps, neem-based sprays, removing infected plants, resistant varieties, field sanitation, and confirming with the local Krishi Vigyan Kendra (KVK). ' +
+    'Never name any chemical pesticide or fungicide product, compound or quantity of chemical. ' +
+    'Reply ONLY with JSON: {"cause": string (specific, in English, e.g. "RICE BLAST (MAGNAPORTHE ORYZAE)"), "crop": string, "actions": [up to 4 short English imperative phrases], ' +
+    '"telegram_en": string (ALL CAPS English telegram, letters A-Z, digits and spaces only, sentences separated by STOP, at most 20 words not counting STOP, beginning with the cause)}.';
+}
+
+// Role 2 — telegraph (Roman Hindi / Marathi writer). Different open model.
+export function telegraphPrompt(lang) {
+  const name = LANG_NAMES[lang] || 'English';
+  const ex = lang === 'mr'
+    ? 'Example: {"telegram":"PANDHRI MASHI PAN GUNDALNE VIRUS STOP GUNDALLELI ROPE UPTUN TAKA STOP PIVLE CHIKAT SAPLE LAVA STOP NEEM TEL FAVARA STOP"}'
+    : 'Example: {"telegram":"SAFED MAKKHI SE PATTA MOD VIRUS STOP MUDE PAUDHE UKHAADEN STOP PEELE CHIPCHIPE TRAP LAGAYEN STOP NEEM TEL CHHIDKEN STOP"}';
+  return `You are a telegraph clerk. Rewrite the English farm advice you are given as a telegram in ${name.toUpperCase()} written in ROMAN LETTERS ONLY (no Devanagari, no English sentences). ` +
+    'Keep the same cause and the same actions; do not add any new advice. ALL CAPS, letters A-Z, digits and spaces only, separate sentences with STOP, at most 20 words not counting STOP, begin with the cause. ' +
+    `The words STOP, KVK and numbers stay as they are; every other word must be ${name}. ` + ex + ' Reply ONLY with JSON {"telegram": string}.';
+}
+
+// Role 3 — judge (safety classifier models: Qwen3Guard / Llama Guard).
+export function judgeVerdict(content) {
+  const c = String(content || '').toLowerCase();
+  if (!c.trim()) return { safe: null, label: 'empty' };
+  if (/safety:\s*unsafe|safety:\s*controversial|^\s*unsafe/m.test(c)) return { safe: false, label: c.replace(/\s+/g, ' ').trim().slice(0, 80) };
+  if (/safety:\s*safe|^\s*safe/m.test(c)) return { safe: true, label: 'safe' };
+  return { safe: null, label: c.slice(0, 60) };
+}
+
+// Role 4 — locate the farmer's KVK through our MCP server (when no dropdown choice).
+export function locatePrompt() {
+  return 'The user is an Indian farmer. If their message names a place in India (village, taluka, town or district), call the find_kvk tool with the most likely state and district. ' +
+    'Reply ONLY with JSON {"state": string|null, "district": string|null, "kvk": string|null, "host": string|null} copied from the tool result; if no place is named or the tool finds nothing, reply {"state":null,"district":null,"kvk":null,"host":null}.';
+}
+
+export function looksLikePlace(text) {
+  return /\b(district|dist\.?|taluka|tehsil|village|gaon|gav|jilla|zilla|near|in|from|at)\s+[A-Z][a-z]{2,}/.test(text) || /\b[A-Z][a-z]{3,}\b/.test(text.replace(/^[A-Z]/, ''));
+}
+
+async function runDiagnose(env, text, { privateRoute, user }) {
+  const body = {
+    messages: [{ role: 'system', content: diagnosePrompt() }, { role: 'user', content: text }],
+    max_tokens: 1800, temperature: 0.3,
+  };
+  if (privateRoute) {
+    const r = await otariStream(env, { ...body, model: PRIVATE_MODEL, max_tokens: 400, chat_template_kwargs: { enable_thinking: false } }, { role: 'diagnose-private', user, timeoutMs: 75000 });
+    const j = r.ok ? parseJsonLoose(r.content) : null;
+    if (j && j.cause && j.telegram_en) return { j, traces: [r.trace] };
+    r.trace.note = 'private route failed; Otari policy takes over';
+    const r2 = await otari(env, { ...body, model: POLICY.diagnose, response_format: { type: 'json_object' } }, { role: 'diagnose', user });
+    return { j: r2.ok ? parseJsonLoose(r2.content) : null, traces: [r.trace, r2.trace], err: r2 };
+  }
+  const r = await otari(env, { ...body, model: POLICY.diagnose, response_format: { type: 'json_object' } }, { role: 'diagnose', user });
+  return { j: r.ok ? parseJsonLoose(r.content) : null, traces: [r.trace], err: r };
+}
+
+async function runTelegraph(env, advice, lang, user) {
+  const body = {
+    model: POLICY.telegraph,
+    messages: [{ role: 'system', content: telegraphPrompt(lang) }, { role: 'user', content: advice }],
+    max_tokens: 400, temperature: 0.3, response_format: { type: 'json_object' },
+  };
+  const traces = [];
+  let r = await otari(env, body, { role: 'telegraph', user, tags: { lang } });
+  traces.push(r.trace);
+  let j = r.ok ? parseJsonLoose(r.content) : null;
+  if (j && j.telegram && looksEnglish(cleanTelegram(j.telegram))) {
+    r = await otari(env, { ...body, messages: [...body.messages, { role: 'assistant', content: r.content }, { role: 'user', content: `That is English. Rewrite it in ${LANG_NAMES[lang]} (Roman letters).` }] }, { role: 'telegraph-retry', user, tags: { lang } });
+    traces.push(r.trace);
+    const j2 = r.ok ? parseJsonLoose(r.content) : null;
+    if (j2 && j2.telegram) j = j2;
+  }
+  return { telegram: j && j.telegram ? cleanTelegram(j.telegram) : null, traces };
+}
+
+async function runJudge(env, adviceText, user) {
+  const r = await otari(env, { model: POLICY.judge, messages: [{ role: 'user', content: 'Advice a farm helpline is about to send to a farmer: ' + adviceText }], max_tokens: 40 }, { role: 'judge', user, timeoutMs: 15000 });
+  const v = r.ok ? judgeVerdict(r.content) : { safe: null, label: r.error || 'unavailable' };
+  r.trace.verdict = v.label;
+  return { verdict: v, trace: r.trace, blockedByGuardrail: r.status === 403 };
+}
+
+async function runLocate(env, text, user) {
+  const mcpId = secret(env, 'KVK_MCP_ID');
+  if (!mcpId) return { kvk: null, trace: null };
+  const r = await otari(env, {
+    model: POLICY.locate,
+    messages: [{ role: 'system', content: locatePrompt() }, { role: 'user', content: text }],
+    mcp_server_ids: [mcpId], max_tool_iterations: 3, max_tokens: 1500, temperature: 0,
+  }, { role: 'locate-mcp', user, timeoutMs: 26000 });
+  const j = r.ok ? parseJsonLoose(r.content) : null;
+  r.trace.mcp = 'kvk-directory';
+  return { kvk: j && j.kvk ? j : null, trace: r.trace };
 }
 
 const EN_WORDS = /\b(THE|AND|REMOVE|APPLY|SPRAY|PLANTS?|LEAVES|WATER|SOIL|USE|WITH|FOR|INFECTED|TRAPS?|CROPS?)\b/g;
 export function looksEnglish(t) { const w = t.split(/\s+/).filter(x => x && x !== 'STOP'); const hits = (t.match(EN_WORDS) || []).length; return w.length > 0 && hits / w.length > 0.25; }
 
-async function callGroq(apiKey, model, userText, lang, url = GROQ_API_URL) {
-  const r = await callGroqOnce(apiKey, model, userText, lang, url);
-  if (lang !== 'en' && looksEnglish(r.telegram)) {
-    const again = await callGroqOnce(apiKey, model, userText + '\n\n(Reply language: ' + (LANG_NAMES[lang] || lang) + ' in Roman letters, not English.)', lang, url);
-    if (!looksEnglish(again.telegram)) return again;
-  }
-  return r;
-}
-
-async function callGroqOnce(apiKey, model, userText, lang, url = GROQ_API_URL) {
-  const isGroq = url === GROQ_API_URL;
-  const body = JSON.stringify({
-    model,
-    ...(isGroq ? { reasoning_effort: 'low' } : {}),
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: buildSystemPrompt(lang) },
-      { role: 'user', content: userText },
-    ],
-    max_tokens: 1200,
-    temperature: 0.3,
-  });
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body,
-  });
-
-  if (!res.ok) {
-    throw new Error(`Groq ${model} returned ${res.status}`);
-  }
-
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (!content) throw new Error('Empty model response');
-
-  const parsed = JSON.parse(content.replace(/^```(json)?|```$/g, '').trim());
-
-  // Validate required fields
-  if (typeof parsed.telegram !== 'string') {
-    throw new Error('Invalid model JSON shape: missing telegram');
-  }
-  if (typeof parsed.cause !== 'string' || parsed.cause.trim() === '') {
-    throw new Error('Model response missing cause field');
-  }
-
-  // Count words in code; never trust the model's own count.
-  parsed.words = parsed.telegram.toUpperCase().split(/\s+/).filter(w => w !== 'STOP' && w.length > 0).length;
-
-  return parsed;
+export function sumCost(traces) {
+  const v = traces.filter(Boolean).reduce((a, t) => a + (Number(t.cost_usd) || 0), 0);
+  return Math.round(v * 1e6) / 1e6;
 }
 
 // ---------------------------------------------------------------------------
@@ -289,102 +435,210 @@ async function loadKvkData(env) {
 }
 
 // ---------------------------------------------------------------------------
-// Request handler
+// Request handlers
 // ---------------------------------------------------------------------------
+function kvkOut(k) { return k ? { district: k.district, kvk: k.kvk, host: k.host, source: k.source, via: k.via } : null; }
+
+function telegramReply(telegram, extra = {}) {
+  const words = telegramWords(telegram);
+  return { telegram, words, cost_paise: costPaise(words), morse: morseEncode(telegram), ...extra };
+}
+
+/** Map an Otari refusal to a telegram the farmer can act on. */
+function refusalTelegram(r, lang) {
+  const code = r?.trace?.error_code || '';
+  const msg = String(r?.error || '');
+  if (r?.status === 429 || /budget|limit|insufficient/i.test(msg + code)) {
+    const t = { en: 'DAILY FREE TELEGRAMS USED STOP TRY AGAIN TOMORROW STOP FOR URGENT HELP CALL KISAN CALL CENTRE 1800 180 1551 STOP',
+      hi: 'AAJ KE MUFT TELEGRAM KHATAM STOP KAL PHIR KOSHISH KAREN STOP TURANT MADAD KE LIYE KISAN CALL CENTRE 1800 180 1551 STOP',
+      mr: 'AAJCHE MOFAT TELEGRAM SAMPLE STOP UDYA PUNHA PRAYATNA KARA STOP TATKAL MADATISATHI KISAN CALL CENTRE 1800 180 1551 STOP' };
+    return { telegram: t[lang] || t.en, reason: 'budget' };
+  }
+  return null;
+}
+
 async function handleTelegram(request, env) {
   let body;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonResponse({ error: 'Invalid JSON body' }, 400);
-  }
+  try { body = await request.json(); } catch { return jsonResponse({ error: 'Invalid JSON body' }, 400); }
+  const { text, lang = 'en', state = '', district = '', farmer = '', route = 'otari', floor = 'code' } = body;
+  if (!text || typeof text !== 'string' || text.trim().length === 0) return jsonResponse({ error: 'text is required' }, 400);
+  if (text.length > 2000) return jsonResponse({ error: 'text must be 2000 characters or fewer' }, 400);
+  if (!['en', 'hi', 'mr'].includes(lang)) return jsonResponse({ error: 'lang must be en, hi, or mr' }, 400);
+  const user = await farmerUser(farmer);
+  const traces = [];
 
-  const { text, lang = 'en', state = '', district = '' } = body;
-
-  if (!text || typeof text !== 'string' || text.trim().length === 0) {
-    return jsonResponse({ error: 'text is required' }, 400);
-  }
-  if (text.length > 2000) {
-    return jsonResponse({ error: 'text must be 2000 characters or fewer' }, 400);
-  }
-  if (!['en', 'hi', 'mr'].includes(lang)) {
-    return jsonResponse({ error: 'lang must be en, hi, or mr' }, 400);
-  }
-
-  // Load KVK data and find match
   const kvkData = await loadKvkData(env);
-  const kvkMatch = (kvkData && state && district)
-    ? findKvk(kvkData, state, district)
-    : null;
+  let kvkMatch = (kvkData && state && district) ? findKvk(kvkData, state, district) : null;
+  if (kvkMatch) kvkMatch = { ...kvkMatch, via: 'dropdown' };
 
-  // Safety floor — checked BEFORE model call
-  const safety = safetyFloor(text, lang, kvkMatch);
-  if (safety.blocked) {
-    const telegram = safety.telegram;
-    const words = telegram.split(/\s+/).filter(w => w !== 'STOP' && w.length > 0).length;
-    const morse = morseEncode(telegram);
-    return jsonResponse({
-      telegram,
-      words,
-      cost_paise: costPaise(words),
-      morse,
-      kvk: kvkMatch ? { district: kvkMatch.district, kvk: kvkMatch.kvk, host: kvkMatch.host, source: kvkMatch.source } : null,
-    });
+  // Safety floor in code, BEFORE any model call. (floor:"otari" skips it so the
+  // Otari organisation guardrail — the same rules, served at /guard/validate — is what stops the request.)
+  if (floor !== 'otari') {
+    const safety = safetyFloor(text, lang, kvkMatch);
+    if (safety.blocked) return jsonResponse(telegramReply(safety.telegram, { kvk: kvkOut(kvkMatch), safety: safety.reason, stopped_by: 'code floor', trace: [], otari_cost_usd: 0 }));
   }
 
-  // Groq API
-  const apiKey = env?.GROQ_API_KEY || '';
-  if (!apiKey) {
-    return jsonResponse({ error: 'GROQ_API_KEY not configured' }, 503);
+  // Diagnose and (when no KVK chosen) locate the farmer's KVK via MCP, in parallel.
+  const wantLocate = !kvkMatch && looksLikePlace(text);
+  const [diag, loc] = await Promise.all([
+    runDiagnose(env, text.trim(), { privateRoute: route === 'private', user }),
+    wantLocate ? runLocate(env, text.trim(), user) : Promise.resolve({ kvk: null, trace: null }),
+  ]);
+  traces.push(...diag.traces); if (loc.trace) traces.push(loc.trace);
+  if (!kvkMatch && loc.kvk && kvkData) {
+    const real = findKvk(kvkData, loc.kvk.state || '', loc.kvk.district || '');
+    if (real) kvkMatch = { ...real, via: 'mcp' };
   }
 
-  // v2: model chain per language. Outside review + our own A/B (1 Nov 2026): gpt-oss failed JSON
-  // validation on Romanized Marathi, gemini-3.5-flash wrote the clearest Marathi telegrams.
-  const gem = env?.GEMINI_API_KEY;
-  const chain = lang === 'mr'
-    ? [[gem, 'gemini-3.5-flash', GEMINI_API_URL], [apiKey, PRIMARY_MODEL, GROQ_API_URL], [gem, 'gemini-3.5-flash-lite', GEMINI_API_URL]]
-    : [[apiKey, PRIMARY_MODEL, GROQ_API_URL], [apiKey, FALLBACK_MODEL, GROQ_API_URL], [gem, 'gemini-3.5-flash-lite', GEMINI_API_URL]];
-  let modelResult, modelUsed, lastErr;
-  for (const [key, model, url] of chain) {
-    if (!key) continue;
-    try { modelResult = await callGroq(key, model, text.trim(), lang, url); modelUsed = model; break; }
-    catch (e) { lastErr = e; console.warn('Model failed:', model, e.message); }
+  if (!diag.j || !diag.j.cause || !diag.j.telegram_en) {
+    const err = diag.err || {};
+    if (err.status === 403 && /guardrail/i.test(String(err.error) + JSON.stringify(err.data || ''))) {
+      const s = safetyFloor(text, lang, kvkMatch);
+      const t = s.blocked ? s.telegram : SAFETY_TELEGRAMS.kvk[lang];
+      return jsonResponse(telegramReply(t, { kvk: kvkOut(kvkMatch), safety: s.reason || 'guardrail', stopped_by: 'Otari guardrail', trace: traces, otari_cost_usd: sumCost(traces) }));
+    }
+    const ref = refusalTelegram(err, lang);
+    if (ref) return jsonResponse(telegramReply(ref.telegram, { kvk: kvkOut(kvkMatch), refused: ref.reason, trace: traces, otari_cost_usd: sumCost(traces) }));
+    const t = 'SERVICE UNAVAILABLE STOP TRY AGAIN LATER STOP';
+    return jsonResponse(telegramReply(t, { kvk: kvkOut(kvkMatch), error: 'Model unavailable: ' + (err.error || 'bad response'), trace: traces, otari_cost_usd: sumCost(traces) }), 502);
   }
-  if (!modelResult) {
-    console.error('All models failed:', lastErr && lastErr.message);
-    const errorTelegram = 'SERVICE UNAVAILABLE STOP TRY AGAIN LATER STOP';
-    return jsonResponse({ telegram: errorTelegram, words: 5, cost_paise: costPaise(5), morse: morseEncode(errorTelegram), kvk: null, error: 'Model unavailable' }, 502);
+  const d = diag.j;
+  const cause = String(d.cause).toUpperCase().slice(0, 80);
+  const telegramEn = cleanTelegram(d.telegram_en);
+  const actions = Array.isArray(d.actions) ? d.actions.slice(0, 4).map(a => String(a).slice(0, 120)) : [];
+  const adviceEn = `Cause: ${cause}. Actions: ${actions.join('; ')}. Telegram: ${telegramEn}`;
+
+  // Translate (different open model) and judge (safety classifier) in parallel.
+  const [tg, jd] = await Promise.all([
+    lang === 'en' ? Promise.resolve({ telegram: telegramEn, traces: [] }) : runTelegraph(env, adviceEn, lang, user),
+    runJudge(env, adviceEn, user),
+  ]);
+  traces.push(...tg.traces, jd.trace);
+  let telegram = tg.telegram || telegramEn;
+
+  // Judge says unsafe, or the Otari guardrail refused the judge's input -> referral telegram.
+  if (jd.verdict.safe === false || jd.blockedByGuardrail) {
+    const s = safetyFloor(adviceEn, lang, kvkMatch);
+    const t = s.blocked ? s.telegram : (kvkMatch ? KVK_NAMED[lang](cleanTelegram(kvkMatch.district || '')) : SAFETY_TELEGRAMS.kvk[lang]);
+    return jsonResponse(telegramReply(t, { cause, kvk: kvkOut(kvkMatch), safety: 'judge', stopped_by: jd.blockedByGuardrail ? 'Otari guardrail' : 'judge model (' + jd.verdict.label + ')', trace: traces, otari_cost_usd: sumCost(traces) }));
   }
+  // Code floor AFTER the models too.
+  const post = safetyFloor(telegram + ' ' + adviceEn, lang, kvkMatch);
+  if (post.blocked) return jsonResponse(telegramReply(post.telegram, { cause, kvk: kvkOut(kvkMatch), safety: post.reason, stopped_by: 'code floor (output)', trace: traces, otari_cost_usd: sumCost(traces) }));
 
-  const { telegram, words, cause } = modelResult;
-  const model = modelUsed;
+  return jsonResponse(telegramReply(telegram, {
+    cause, actions, telegram_en: telegramEn, kvk: kvkOut(kvkMatch),
+    model: diag.traces[diag.traces.length - 1]?.served || null,
+    judge: jd.verdict.label, trace: traces, otari_cost_usd: sumCost(traces),
+  }));
+}
 
-  // Safety floor — checked AFTER model response too
-  const postSafety = safetyFloor(telegram, lang, kvkMatch);
-  if (postSafety.blocked) {
-    const safeTelegram = postSafety.telegram;
-    const safeWords = safeTelegram.split(/\s+/).filter(w => w !== 'STOP' && w.length > 0).length;
-    return jsonResponse({
-      telegram: safeTelegram,
-      words: safeWords,
-      cost_paise: costPaise(safeWords),
-      morse: morseEncode(safeTelegram),
-      kvk: kvkMatch ? { district: kvkMatch.district, kvk: kvkMatch.kvk, host: kvkMatch.host, source: kvkMatch.source } : null,
-    });
-  }
+// Sources: Otari web search (one search, Indian extension sources preferred).
+export const TRUSTED_SOURCE_RE = /(\.gov\.in|\.nic\.in|\.ac\.in|\.res\.in|\.edu\.in|icar\.org\.in|icar-[a-z]+\.in|vikaspedia\.in|tnau\.ac\.in)(\/|$)/i;
+export function pickSources(toolCalls) {
+  const all = [];
+  for (const c of toolCalls || []) if (c.type === 'web_search' && c.status === 'completed') for (const s of c.sources || []) all.push({ url: s.url, title: s.title });
+  const seen = new Set(); const uniq = all.filter(s => s.url && !seen.has(s.url) && seen.add(s.url));
+  let host = u => { try { return new URL(u).hostname; } catch { return ''; } };
+  const trusted = uniq.filter(s => TRUSTED_SOURCE_RE.test(host(s.url) + '/'));
+  return { trusted, other: uniq.filter(s => !trusted.includes(s)) };
+}
+async function handleSource(request, env) {
+  let b; try { b = await request.json(); } catch { return jsonResponse({ error: 'Invalid JSON body' }, 400); }
+  const cause = String(b.cause || '').slice(0, 120); const crop = String(b.crop || '').slice(0, 60);
+  if (!cause) return jsonResponse({ error: 'cause is required' }, 400);
+  const user = await farmerUser(b.farmer);
+  const r = await otari(env, {
+    model: POLICY.research,
+    messages: [{ role: 'system', content: 'Search once for an Indian public agricultural extension page (ICAR institute, state agricultural university, KVK, Vikaspedia or a government agriculture department) on managing the named crop problem. Then reply in one short English sentence saying what the best source recommends first. Never recommend a chemical product or quantity.' },
+      { role: 'user', content: `${cause}${crop ? ' in ' + crop : ''}, India` }],
+    tools: [{ type: 'otari_web_search', max_uses: 1 }], max_tokens: 1200,
+  }, { role: 'source-websearch', user, timeoutMs: 27000 });
+  if (!r.ok) { const ref = refusalTelegram(r, 'en'); return jsonResponse({ error: ref ? 'Daily allowance used' : (r.error || 'search failed'), trace: [r.trace] }, ref ? 429 : 502); }
+  const { trusted, other } = pickSources(r.data.otari_tool_calls);
+  let summary = String(r.content || '').trim().slice(0, 300);
+  if (safetyFloor(summary).blocked) summary = '';
+  return jsonResponse({ summary, sources: trusted.slice(0, 3), other_sources: other.slice(0, 2), trace: [r.trace], otari_cost_usd: sumCost([r.trace]) });
+}
 
-  const cost_paise = costPaise(words);
-  const morse = morseEncode(telegram);
+// Field maths: Otari code execution does the arithmetic, the model only explains.
+export function calcPrompt() {
+  return 'You help an Indian farmer with field arithmetic: land area conversions, plant counts from spacing, drip or sprinkler run time, and similar sums. ' +
+    'Always use the code execution tool to compute every number; never do arithmetic in your head. Units: 1 acre = 40 guntha = 4046.86 square metres; 1 hectare = 10000 square metres = 2.47105 acres. ' +
+    'If a number the calculation needs is missing, say which one in the answer instead of guessing. Do not give any pesticide or fertiliser quantity. ' +
+    'Reply ONLY with JSON {"answer_en": string (one or two plain sentences with the results and units), "telegram_en": string (ALL CAPS English telegram, A-Z digits and spaces, STOP between sentences, at most 15 words not counting STOP), "python": string (the code you ran)}.';
+}
+async function handleCalc(request, env) {
+  let b; try { b = await request.json(); } catch { return jsonResponse({ error: 'Invalid JSON body' }, 400); }
+  const q = String(b.question || '').trim(); const lang = ['en', 'hi', 'mr'].includes(b.lang) ? b.lang : 'en';
+  if (!q || q.length > 600) return jsonResponse({ error: 'question is required (max 600 chars)' }, 400);
+  const floor = safetyFloor(q, lang);
+  if (floor.blocked) return jsonResponse(telegramReply(floor.telegram, { safety: floor.reason, stopped_by: 'code floor', trace: [] }));
+  const user = await farmerUser(b.farmer);
+  const r = await otari(env, { model: POLICY.calc, messages: [{ role: 'system', content: calcPrompt() }, { role: 'user', content: q }], tools: [{ type: 'otari_code_execution' }], max_tokens: 2500, temperature: 0 }, { role: 'calc-code-exec', user, timeoutMs: 28000 });
+  const traces = [r.trace];
+  const j = r.ok ? parseJsonLoose(r.content) : null;
+  if (!j || !j.telegram_en) { const ref = refusalTelegram(r, lang); if (ref) return jsonResponse(telegramReply(ref.telegram, { refused: ref.reason, trace: traces }));
+    return jsonResponse({ error: 'Could not compute: ' + (r.error || 'bad response'), trace: traces }, 502); }
+  let telegram = cleanTelegram(j.telegram_en);
+  if (lang !== 'en') { const tg = await runTelegraph(env, j.answer_en + ' Telegram: ' + telegram, lang, user); traces.push(...tg.traces); if (tg.telegram) telegram = tg.telegram; }
+  const post = safetyFloor(telegram + ' ' + j.answer_en, lang);
+  if (post.blocked) return jsonResponse(telegramReply(post.telegram, { safety: post.reason, trace: traces }));
+  return jsonResponse(telegramReply(telegram, { answer_en: String(j.answer_en).slice(0, 400), python: String(j.python || '').slice(0, 1500), trace: traces, otari_cost_usd: sumCost(traces) }));
+}
 
-  return jsonResponse({
-    telegram,
-    words,
-    cost_paise,
-    morse,
-    cause: cause || null,
-    model,
-    kvk: kvkMatch ? { district: kvkMatch.district, kvk: kvkMatch.kvk, host: kvkMatch.host, source: kvkMatch.source } : null,
-  });
+// MCP server: our KVK directory, which Otari connects to as a workspace MCP server.
+export const MCP_TOOLS = [{
+  name: 'find_kvk',
+  description: 'Find the ICAR Krishi Vigyan Kendra (KVK, farm science centre) for an Indian state and district. Returns up to 3 matches with the KVK address, host institution and the ICAR source page.',
+  inputSchema: { type: 'object', properties: { state: { type: 'string', description: 'Indian state, e.g. Maharashtra' }, district: { type: 'string', description: 'District, e.g. Pune' } }, required: ['state', 'district'] },
+}];
+export function kvkSearch(kvkData, state, district) {
+  if (!kvkData) return [];
+  const s = String(state || '').toLowerCase().trim(); const dd = String(district || '').toLowerCase().trim();
+  if (!dd) return [];
+  return kvkData.kvks.filter(k => (!s || (k.state || '').toLowerCase() === s) && (((k.district || '').toLowerCase().includes(dd)) || (k.kvk || '').toLowerCase().includes(dd))).slice(0, 3);
+}
+async function handleMcp(request, env) {
+  const tok = secret(env, 'MCP_TOKEN');
+  if (tok && request.headers.get('Authorization') !== 'Bearer ' + tok) return new Response('unauthorized', { status: 401 });
+  if (request.method === 'GET') return new Response('method not allowed', { status: 405 });
+  let m; try { m = await request.json(); } catch { return jsonResponse({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400); }
+  const reply = async (msg) => {
+    if (!msg || msg.id === undefined || msg.id === null) return null; // notification
+    const ok = result => ({ jsonrpc: '2.0', id: msg.id, result });
+    switch (msg.method) {
+      case 'initialize': return ok({ protocolVersion: msg.params?.protocolVersion || '2025-03-26', capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'kvk-directory', version: '1.0.0' } });
+      case 'ping': return ok({});
+      case 'tools/list': return ok({ tools: MCP_TOOLS });
+      case 'tools/call': {
+        if (msg.params?.name !== 'find_kvk') return { jsonrpc: '2.0', id: msg.id, error: { code: -32602, message: 'Unknown tool' } };
+        const a = msg.params.arguments || {};
+        const hits = kvkSearch(await loadKvkData(env), a.state, a.district);
+        return ok({ content: [{ type: 'text', text: JSON.stringify(hits.length ? hits : { found: 0, note: 'No KVK matched; try the district headquarters name.' }) }], isError: false });
+      }
+      default: return { jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: 'Method not found' } };
+    }
+  };
+  if (Array.isArray(m)) { const out = (await Promise.all(m.map(reply))).filter(Boolean); return out.length ? jsonResponse(out) : new Response(null, { status: 202 }); }
+  const out = await reply(m);
+  return out ? jsonResponse(out) : new Response(null, { status: 202 });
+}
+
+// Guardrails service contract (POST /validate) so Otari can mandate our safety floor.
+async function handleGuard(request, env) {
+  const tok = secret(env, 'GUARD_TOKEN');
+  if (tok && request.headers.get('Authorization') !== 'Bearer ' + tok) return new Response('unauthorized', { status: 401 });
+  if (request.method === 'GET') return jsonResponse([{ name: 'krishi-safety-floor', guardrail_name: 'krishi_safety_floor' }]);
+  let b; try { b = await request.json(); } catch { return jsonResponse({ error: 'bad json' }, 400); }
+  const s = safetyFloor(String(b.input_text || ''));
+  return jsonResponse({ profile: b.profile || 'krishi-safety-floor', result: { valid: !s.blocked, explanation: s.blocked ? s.reason : null, score: s.blocked ? 1 : 0 } });
+}
+
+async function handlePrivateStatus() {
+  const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 4000);
+  try { const r = await fetch(PRIVATE_HEALTH, { signal: ctrl.signal, redirect: 'manual' }); clearTimeout(t); const ok = r.status === 200 && /ok/i.test(await r.text()); return jsonResponse({ awake: ok }); }
+  catch { clearTimeout(t); return jsonResponse({ awake: false }); }
 }
 
 function jsonResponse(data, status = 200) {
@@ -403,28 +657,16 @@ function jsonResponse(data, status = 200) {
 export default {
   async fetch(request, env, _ctx) {
     const url = new URL(request.url);
-
-    // CORS preflight
     if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
-        },
-      });
+      return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id' } });
     }
-
-    // API route
-    if (request.method === 'POST' && url.pathname === '/api/telegram') {
-      return handleTelegram(request, env);
-    }
-
-    // Static assets
-    if (env?.ASSETS) {
-      return env.ASSETS.fetch(request);
-    }
-
+    if (request.method === 'POST' && url.pathname === '/api/telegram') return handleTelegram(request, env);
+    if (request.method === 'POST' && url.pathname === '/api/source') return handleSource(request, env);
+    if (request.method === 'POST' && url.pathname === '/api/calc') return handleCalc(request, env);
+    if (url.pathname === '/api/private-status') return handlePrivateStatus();
+    if (url.pathname === '/mcp') return handleMcp(request, env);
+    if (url.pathname === '/guard/validate' || url.pathname === '/guard/profiles') return handleGuard(request, env);
+    if (env?.ASSETS) return env.ASSETS.fetch(request);
     return new Response('Not found', { status: 404 });
   },
 };
