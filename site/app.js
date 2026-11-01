@@ -550,7 +550,7 @@ function showAllowance() {
   const el = document.getElementById('allowance'); if (!el) return;
   const id = farmerId(); if (!id) return;
   fetch('/api/allowance?farmer=' + encodeURIComponent(id)).then(r => r.json()).then(j => {
-    if (!j.known) { el.textContent = ''; return; }
+    if (!j.known) { el.textContent = j.reason ? `Your free daily allowance (an Otari per-user budget): ${j.limit_requests} gateway calls a day. ${j.reason}.` : ''; return; }
     const left = Math.max(0, j.limit_requests - j.used_requests);
     el.textContent = `Your free daily allowance (an Otari per-user budget): ${j.used_requests} of ${j.limit_requests} gateway calls used today, ${left} left. One telegram uses about 3 calls.`;
   }).catch(() => {});
@@ -597,6 +597,8 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('calc-telegram').textContent = j.telegram;
         document.getElementById('calc-answer').textContent = j.answer_en || (j.stopped_by ? 'Stopped by ' + j.stopped_by : '');
         document.getElementById('calc-python').textContent = j.python || '(no code returned)';
+        const vf = (j.verified || []).map(v => `${v.label || 'result'}: sandbox printed ${v.sandbox}, this app re-computed ${v.app ?? 'n/a'} ${v.match ? '(matches)' : '(does NOT match)'}`).join(' · ');
+        const ve = document.getElementById('calc-verified'); if (ve) ve.textContent = vf || 'No checkable expression came back for this answer.';
         document.getElementById('calc-receipt').textContent = (j.trace || []).map(t => `${ROLE_LABEL[t.role] || t.role}: ${t.served || t.error} ${t.ms ? t.ms + ' ms' : ''} ${t.cost_usd != null ? 'US$' + Number(t.cost_usd).toFixed(6) : ''}${t.tool_fee_usd ? ' (includes Otari code-execution fee US$' + Number(t.tool_fee_usd).toFixed(4) + ': the sandbox ran)' : ''}`).join(' · ') + ' · Otari does not yet return the executed code itself, so the code shown is the model’s own copy of what it ran.';
         card.hidden = false;
       }

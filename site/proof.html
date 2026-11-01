@@ -29,15 +29,16 @@
 <button class="kt-btn kt-btn--print">RUN IT</button><div class="pf-out"></div></div>
 
 <div class="pf-row" data-f="guardrail"><h3>4. Guardrails</h3>
-<p>Our safety floor (poisoning, self-harm and pesticide-dose rules in English, Hindi and Marathi) runs as a service and is registered in Otari as an organisation guardrail in block mode. A poisoning message sent straight to Otari is refused before any model sees it.</p>
+<p>Our safety floor (poisoning, self-harm and pesticide-dose rules in English, Hindi and Marathi) runs as a service and is registered in Otari as an organisation guardrail in block mode. A poisoning message (in English and in Hindi) and a pesticide-dose question in Marathi, sent straight to Otari, are refused before any model sees them.</p>
 <button class="kt-btn kt-btn--print">RUN IT</button><div class="pf-out"></div></div>
 
 <div class="pf-row" data-f="user_budget"><h3>5. Per-user budgets</h3>
 <p>Each farmer has a daily allowance enforced by Otari (end-user budget on the app&rsquo;s service key: 40 requests and US$0.05 a day). To show the refusal without waiting a day, this uses a demo key whose allowance is 1 request per farmer per day, with a brand-new farmer id each time.</p>
 <button class="kt-btn kt-btn--print">RUN IT</button><div class="pf-out"></div></div>
 
-<div class="pf-row"><h3>6. Budgets and spending limits</h3>
-<p>The app&rsquo;s service key has a US$1 monthly spend ceiling. The diagnose policy has a rule <code>budget_used_pct &ge; 80 &rarr; Gemma 3 27B</code>, so the app gets cheaper instead of stopping. Pushing a real key past 80% in a live button would spend the ceiling, so this one is a recorded run with Otari request ids: <a href="https://github.com/tab-for-akshay/krishi-telegram/blob/otari/evidence/README.md" target="_blank" rel="noopener">evidence</a> (Qwen3-235B at 0% &rarr; Gemma 3 27B at 83%).</p></div>
+<div class="pf-row" data-f="budget_tierdown"><h3>6. Budgets and spending limits (budget-aware routing)</h3>
+<p>The app&rsquo;s service key has a US$1 monthly spend ceiling, every farmer has a daily budget, and policy <code>krishi-diagnose</code> has the rule <code>budget_used_pct &ge; 80 &rarr; Gemma 3 27B</code>, so a farmer near their limit gets a cheaper model instead of a refusal. This button runs it live: a brand-new farmer on a tiny daily budget (US$0.0025) sends a long field diary (about 83% of the budget, answered by Qwen3-235B), then a short question on the <em>same</em> policy, which Otari sends to Gemma 3 27B. The spend after each call is read back from Otari&rsquo;s end-user record. Each run costs about US$0.002.</p>
+<button class="kt-btn kt-btn--print">RUN IT</button><div class="pf-out"></div></div>
 
 <div class="pf-row" data-f="mcp"><h3>7. MCP</h3>
 <p>Our own MCP server (<code>/mcp</code>, tool <code>find_kvk</code> over ICAR&rsquo;s 708 Krishi Vigyan Kendras) is registered in the Otari workspace. The model calls it through Otari to find a farmer&rsquo;s KVK from the town they name.</p>
@@ -48,7 +49,7 @@
 <button class="kt-btn kt-btn--print">RUN IT</button><div class="pf-out"></div></div>
 
 <div class="pf-row" data-f="code_execution"><h3>9. Code execution</h3>
-<p>Field maths: the model must compute with Otari code execution. Right answer: about 495,740 seedlings.</p>
+<p>Field maths: the model must compute with Otari code execution. Right answer: about 495,740 seedlings. Otari&rsquo;s response does not include the executed code, so this app re-computes the model&rsquo;s expression itself and shows whether it matches what the sandbox printed. The Otari tool fee on the call shows the sandbox really ran.</p>
 <button class="kt-btn kt-btn--print">RUN IT</button><div class="pf-out"></div></div>
 
 <p class="kt-footer-attribution">Built by Tab, an AI assistant, for team lead Akshay Wagh. Source: <a href="https://github.com/tab-for-akshay/krishi-telegram/tree/otari">otari branch</a>.</p>
@@ -63,7 +64,7 @@ document.querySelectorAll('.pf-row[data-f]').forEach(row=>{
     try{
       const r=await fetch('/api/proof?f='+row.dataset.f); const j=await r.json();
       const rows=(j.steps||[]).map(s=>`<tr><td>${esc(s.label)}</td><td class="${s.status===200?'ok':'no'}">${esc(s.status)}</td><td><code>${esc(s.requested||'')}</code></td><td><code>${esc(s.served||'—')}</code></td><td>${s.fallback?'<b>fallback: true</b><br>':''}${s.attempts?'attempts: '+s.attempts+'<br>':''}${s.error_code?'error code: <b>'+esc(s.error_code)+'</b><br>':''}${s.budget_scope?'budget scope: '+esc(s.budget_scope)+'<br>':''}${s.guardrails?'guardrails: <code>'+esc(s.guardrails)+'</code><br>':''}${s.request_id?'<small>request '+esc(s.request_id)+'</small>':''}</td></tr>`+
-        ((s.answer||s.body||s.python||s.sources)?`<tr><td colspan="5"><small>${s.answer?'Answer: '+esc(typeof s.answer==='string'?s.answer:JSON.stringify(s.answer))+'<br>':''}${s.body?'Otari said: <code>'+esc(JSON.stringify(s.body))+'</code><br>':''}${s.sources?'Sources: '+s.sources.map(x=>'<a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+esc(x.title||x.url)+'</a>').join(', ')+'<br>':''}${s.python?'<pre class="kt-code">'+esc(s.python)+'</pre>':''}</small></td></tr>`:'')).join('');
+        ((s.answer||s.body||s.python||s.sources||s.spend_after||s.note)?`<tr><td colspan="5"><small>${s.answer?'Answer: '+esc(typeof s.answer==='string'?s.answer:JSON.stringify(s.answer))+'<br>':''}${s.body?'Otari said: <code>'+esc(JSON.stringify(s.body))+'</code><br>':''}${s.sources?'Sources: '+s.sources.map(x=>'<a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+esc(x.title||x.url)+'</a>').join(', ')+'<br>':''}${s.spend_after?'Otari end-user spend after this call: US$'+Number(s.spend_after.spend).toFixed(6)+'<br>':''}${s.verified&&s.verified.length?'Re-check: '+s.verified.map(v=>esc(v.label||'result')+': sandbox printed '+esc(v.sandbox)+', app re-computed '+esc(v.app)+' '+(v.match?'<b class="ok">matches</b>':'<b class="no">does not match</b>')).join('; ')+'<br>':''}${s.tool_fee_usd?'Otari gateway tool fee: US$'+Number(s.tool_fee_usd).toFixed(4)+'<br>':''}${s.note?esc(s.note)+'<br>':''}${s.python?'<pre class="kt-code">'+esc(s.python)+'</pre>':''}</small></td></tr>`:'')).join('');
       out.innerHTML=`<p><b>Expect:</b> ${esc(j.expect||j.error)}</p><table><tr><th>Call</th><th>HTTP</th><th>Asked for</th><th>Answered by</th><th>Otari headers</th></tr>${rows}</table><p><small>${((Date.now()-t0)/1000).toFixed(1)} s</small></p>`;
     }catch(e){out.textContent='Network error: '+e.message;}
     b.disabled=false; b.textContent='RUN IT AGAIN';

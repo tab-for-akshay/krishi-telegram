@@ -26,6 +26,22 @@ Not taken, and why:
 - **Swap the abliterated private model.** Akshay asked for one self-hosted uncensored model in this entry. It never answers alone: the code floor, the Otari block-mode guardrail and the Qwen3Guard judge wrap it exactly as they wrap the hosted models. The README says so plainly.
 - **Eligibility flag (Fo).** The disclosure line is on every artefact so the organisers can judge it.
 
-## Round 2
+## Round 2 (1 Nov 2026, ~21:16Z) on v2.1 (commit 86f3e0e)
 
-(pending)
+Same brief, plus: "there is deliberately no video; score that line 0". Scores: **Fo 95/100**, **Arden ~93/100** (feature points already past the 60 cap). Both named the same weakest line: budgets were proven only by a recorded run on a deleted temporary key.
+
+| Critique | v3 change |
+|---|---|
+| Budget tier-down not live (both; Fo's "single thing") | New proof button `f=budget_tierdown`: a new farmer on a US$0.0025 end-user budget sends a long diary through the real `krishi-diagnose` policy (Qwen3-235B, ~83% used), then a short question on the same policy, which Otari routes to Gemma 3 27B by `budget_used_pct >= 80`. Spend after each call is read back from Otari. About US$0.002 a run, capped per server instance. |
+| Code execution is the model's word (both) | The model now also returns each calculation as one arithmetic expression with the value its code printed; the app re-computes it with its own safe evaluator and shows "sandbox printed X, app re-computed X (matches)". The Otari tool fee shows the sandbox ran. |
+| Guardrail evidence label "self_harm" on a poisoning test (Fo) | Guardrail now answers `poisoning_or_self_harm_emergency` or `pesticide_dose`; proof page also sends a Hindi poisoning message and a Marathi dose question. Evidence updated with the new request ids. |
+| Allowance hard-codes limits, reports a new farmer as known (Arden) | A farmer with no Otari record yet is shown as such; limits are labelled as coming from the `farmer-daily` budget export, because a service key cannot read budget limits. Raised in feedback. |
+| MCP call can silently not happen (Arden) | The locate receipt row now says whether a KVK came back from `find_kvk`, and says plainly that Otari does not report MCP calls on Chat Completions. |
+| Export shows `guardrails: []` on every policy (Arden) | `otari-config/README.md` explains the guardrail is organisation-level; `service-keys.json` added. |
+| Judge path (both) | README opens with "Judge's 60 seconds": one curl per feature against the live proof API, and a rubric → check → config table. |
+
+Not taken: a deliberately dead provider in a policy (Arden): the routing check already shows a real refusal falling over inside one request, and a fake dead target would be staged. Fetching the top search result's page (Fo): web search already scores; kept the cost down.
+
+## v3
+
+v3 is the version above, live at https://krishi-telegram-otari.vercel.app. 118 tests.

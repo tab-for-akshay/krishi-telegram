@@ -34,5 +34,29 @@
     "ceiling_count": 0,
     "created_at": "2026-11-01T20:47:55.617987+00:00",
     "updated_at": "2026-11-01T20:47:55.617989+00:00"
+  },
+  {
+    "budget_id": "6be3d3d0-f2e4-4bb7-80d5-7be448fb1d89",
+    "name": "tierdown-evidence-ceiling",
+    "max_budget": 0.006,
+    "token_limit": null,
+    "request_limit": null,
+    "budget_duration_sec": null,
+    "reset_alignment": "calendar_month",
+    "ceiling_count": 1,
+    "created_at": "2026-11-01T20:48:56.108027+00:00",
+    "updated_at": "2026-11-01T20:50:10.968924+00:00"
+  },
+  {
+    "budget_id": "b5338355-9773-400b-8dc6-6db5f66300dc",
+    "name": "tierdown-demo-user",
+    "max_budget": 0.0025,
+    "token_limit": null,
+    "request_limit": null,
+    "budget_duration_sec": null,
+    "reset_alignment": "calendar_day",
+    "ceiling_count": 0,
+    "created_at": "2026-11-01T21:20:20.924643+00:00",
+    "updated_at": "2026-11-01T21:20:20.924646+00:00"
   }
 ]

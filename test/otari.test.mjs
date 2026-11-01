@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import worker, { safetyFloor, pickSources, kvkSearch, MCP_TOOLS, parseJsonLoose, cleanTelegram, looksEnglish, sumCost, farmerUser, looksLikePlace } from '../site/worker.mjs';
+import worker, { safetyFloor, pickSources, kvkSearch, MCP_TOOLS, parseJsonLoose, cleanTelegram, looksEnglish, sumCost, farmerUser, looksLikePlace, evalArith, crossCheck } from '../site/worker.mjs';
 import fs from 'node:fs';
 
 const kvk = JSON.parse(fs.readFileSync(new URL('../site/data/kvk.json', import.meta.url)));
@@ -37,7 +37,7 @@ test('kvkSearch: place puts the KVK located there first', () => {
 test('guardrail endpoint speaks the Otari guardrail contract', async () => {
   let r = await post('/guard/validate', { profile: 'krishi-safety-floor', input_text: 'my brother drank pesticide' });
   let j = await r.json();
-  assert.equal(j.result.valid, false); assert.equal(j.result.explanation, 'self_harm');
+  assert.equal(j.result.valid, false); assert.equal(j.result.explanation, 'poisoning_or_self_harm_emergency');
   r = await post('/guard/validate', { input_text: 'tomato leaves curling' });
   j = await r.json();
   assert.equal(j.result.valid, true);
@@ -71,4 +71,15 @@ test('looksLikePlace only fires when a place is named', () => {
   assert.equal(looksLikePlace('I farm near Baramati in Pune district'), true);
   assert.equal(looksLikePlace('Tomato leaves are curling. Whitefly under leaves.'), false);
   assert.equal(looksLikePlace('Majha gav Shirur, taluka Shirur'), true);
+});
+
+test('code-execution re-check: safe arithmetic only, and matches within 0.5%', () => {
+  assert.equal(evalArith('(2*4046.86+25*101.17)*0.7/(0.15*0.10)'), (2*4046.86+25*101.17)*0.7/(0.15*0.10));
+  assert.equal(evalArith('2+3*4'), 14);
+  assert.equal(evalArith('-(2+3)*2'), -10);
+  assert.equal(evalArith('process.exit()'), null);
+  assert.equal(evalArith('2**10'), null);
+  const [c] = crossCheck([{ label: 'seedlings', expr: '(2*4046.86+25*101.17)*0.7/(0.15*0.10)', value: 495740 }]);
+  assert.equal(c.match, true);
+  assert.equal(crossCheck([{ expr: '1+1', value: 3 }])[0].match, false);
 });

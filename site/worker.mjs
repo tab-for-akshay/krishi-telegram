@@ -437,6 +437,7 @@ async function runLocate(env, text, user) {
   }, { role: 'locate-mcp', user, timeoutMs: 26000 });
   const j = r.ok ? parseJsonLoose(r.content) : null;
   r.trace.mcp = 'kvk-directory';
+  r.trace.note = j && j.kvk ? 'KVK returned by the find_kvk tool: ' + String(j.kvk).slice(0, 80) + ' (checked against our own list)' : 'no KVK came back: the model did not get a match from find_kvk (Otari does not report MCP calls on Chat Completions, so we cannot see whether it called the tool)';
   return { kvk: j && j.kvk ? j : null, trace: r.trace };
 }
 
@@ -604,8 +605,28 @@ export function calcPrompt() {
   return 'You help an Indian farmer with field arithmetic: land area conversions, plant counts from spacing, drip or sprinkler run time, and similar sums. ' +
     'Always use the code execution tool to compute every number; never do arithmetic in your head. Units: 1 acre = 40 guntha = 4046.86 square metres; 1 hectare = 10000 square metres = 2.47105 acres. ' +
     'If a number the calculation needs is missing, say which one in the answer instead of guessing. Do not give any pesticide or fertiliser quantity. ' +
-    'Reply ONLY with JSON {"answer_en": string (one or two plain sentences with the results and units), "telegram_en": string (ALL CAPS English telegram, A-Z digits and spaces, STOP between sentences, at most 15 words not counting STOP), "python": string (the code you ran)}.';
+    'Reply ONLY with JSON {"answer_en": string (one or two plain sentences with the results and units), "telegram_en": string (ALL CAPS English telegram, A-Z digits and spaces, STOP between sentences, at most 15 words not counting STOP), "python": string (the code you ran), "checks": [up to 3 objects {"label": string, "expr": string (the same calculation as ONE arithmetic expression using only numbers, + - * / and parentheses, e.g. \"(2*4046.86+25*101.17)*0.7/(0.15*0.10)\"), "value": number (the result your code printed for it)}]}.';
 }
+
+// Safe arithmetic evaluator (numbers, + - * / and parentheses only) used to re-check what the code-execution sandbox printed.
+export function evalArith(src) {
+  const s = String(src || '').replace(/\s+/g, '');
+  if (!s || s.length > 200 || /[^0-9.+\-*/()]/.test(s)) return null;
+  let i = 0;
+  const num = () => { const m = /^\d+(\.\d+)?|^\.\d+/.exec(s.slice(i)); if (!m) throw 0; i += m[0].length; return parseFloat(m[0]); };
+  const atom = () => { if (s[i] === '(') { i++; const v = expr(); if (s[i++] !== ')') throw 0; return v; } if (s[i] === '-') { i++; return -atom(); } return num(); };
+  const term = () => { let v = atom(); while (s[i] === '*' || s[i] === '/') { const o = s[i++]; const r = atom(); v = o === '*' ? v * r : v / r; } return v; };
+  const expr = () => { let v = term(); while (s[i] === '+' || s[i] === '-') { const o = s[i++]; const r = term(); v = o === '+' ? v + r : v - r; } return v; };
+  try { const v = expr(); return i === s.length && Number.isFinite(v) ? v : null; } catch { return null; }
+}
+export function crossCheck(checks) {
+  return (Array.isArray(checks) ? checks : []).slice(0, 3).map(c => {
+    const app = evalArith(c && c.expr); const sandbox = Number(c && c.value);
+    const match = app != null && Number.isFinite(sandbox) && Math.abs(app - sandbox) <= Math.max(1e-6, Math.abs(app) * 0.005);
+    return { label: String(c?.label || '').slice(0, 80), expr: String(c?.expr || '').slice(0, 200), sandbox: Number.isFinite(sandbox) ? sandbox : null, app, match };
+  });
+}
+
 async function handleCalc(request, env) {
   let b; try { b = await request.json(); } catch { return jsonResponse({ error: 'Invalid JSON body' }, 400); }
   const q = String(b.question || '').trim(); const lang = ['en', 'hi', 'mr'].includes(b.lang) ? b.lang : 'en';
@@ -622,7 +643,7 @@ async function handleCalc(request, env) {
   if (lang !== 'en') { const tg = await runTelegraph(env, j.answer_en + ' Telegram: ' + telegram, lang, user); traces.push(...tg.traces); if (tg.telegram) telegram = tg.telegram; }
   const post = safetyFloor(telegram + ' ' + j.answer_en, lang);
   if (post.blocked) return jsonResponse(telegramReply(post.telegram, { safety: post.reason, trace: traces }));
-  return jsonResponse(telegramReply(telegram, { answer_en: String(j.answer_en).slice(0, 400), python: String(j.python || '').slice(0, 1500), trace: traces, otari_cost_usd: sumCost(traces) }));
+  return jsonResponse(telegramReply(telegram, { answer_en: String(j.answer_en).slice(0, 400), python: String(j.python || '').slice(0, 1500), verified: crossCheck(j.checks), trace: traces, otari_cost_usd: sumCost(traces) }));
 }
 
 // MCP server: our KVK directory, which Otari connects to as a workspace MCP server.
@@ -672,7 +693,8 @@ async function handleGuard(request, env) {
   if (request.method === 'GET') return jsonResponse([{ name: 'krishi-safety-floor', guardrail_name: 'krishi_safety_floor' }]);
   let b; try { b = await request.json(); } catch { return jsonResponse({ error: 'bad json' }, 400); }
   const s = safetyFloor(String(b.input_text || ''));
-  return jsonResponse({ profile: b.profile || 'krishi-safety-floor', result: { valid: !s.blocked, explanation: s.blocked ? s.reason : null, score: s.blocked ? 1 : 0 } });
+  const label = s.reason === 'self_harm' ? 'poisoning_or_self_harm_emergency' : s.reason;
+  return jsonResponse({ profile: b.profile || 'krishi-safety-floor', result: { valid: !s.blocked, explanation: s.blocked ? label : null, score: s.blocked ? 1 : 0 } });
 }
 
 
@@ -680,7 +702,14 @@ async function handleGuard(request, env) {
 // /api/proof: run one Otari feature live and return the raw Otari-* evidence.
 // ---------------------------------------------------------------------------
 const DIARY_LINE = 'Day note: rows 1 to 40 look even, no new spots, soil moist after irrigation, a few aphids on the border rows. ';
-export const PROOF_FEATURES = ['routing', 'guardrail', 'user_budget', 'mcp', 'web_search', 'code_execution'];
+export const PROOF_FEATURES = ['routing', 'guardrail', 'user_budget', 'budget_tierdown', 'mcp', 'web_search', 'code_execution'];
+const TIERDOWN_BUDGET = 'b5338355-9773-400b-8dc6-6db5f66300dc'; const TIERDOWN_MAX = 0.0025; const TIER_REPEAT = 513;
+const TIER_DIARY = 'Day note: cotton field 2 acres near Akola, leaves yellowing at the edges after rain, checked soil moisture, some whitefly seen under leaves, neighbour says pink bollworm traps caught a few moths. ';
+const _tierRuns = { n: 0 };
+async function endUserSpend(env, user) {
+  try { const r = await fetch(OTARI_BASE + '/end-users/' + encodeURIComponent(user), { headers: { Authorization: 'Bearer ' + secret(env, 'OTARI_KEY') } });
+    if (!r.ok) return null; const j = await r.json(); return { spend: Number(j.spend || 0), requests: j.current_requests, budget_id: j.budget_id }; } catch { return null; }
+}
 async function handleProof(request, env) {
   const url = new URL(request.url); const f = url.searchParams.get('f') || '';
   if (!PROOF_FEATURES.includes(f)) return jsonResponse({ error: 'f must be one of ' + PROOF_FEATURES.join(', ') }, 400);
@@ -698,9 +727,28 @@ async function handleProof(request, env) {
   if (f === 'guardrail') {
     const r = await otari(env, { model: POLICY.telegraph, messages: [{ role: 'user', content: 'My brother drank pesticide in the field, what do we do' }], max_tokens: 20 }, { role: 'proof-guardrail', user });
     step('poisoning message sent straight to Otari (app code floor skipped)', r, { body: r.data || null });
+    const hi = await otari(env, { model: POLICY.telegraph, messages: [{ role: 'user', content: 'मेरे भाई ने खेत में कीटनाशक पी लिया है, क्या करें' }], max_tokens: 20 }, { role: 'proof-guardrail', user });
+    step('the same message in Hindi (Devanagari)', hi, { body: hi.data || null });
+    const mr = await otari(env, { model: POLICY.telegraph, messages: [{ role: 'user', content: 'किती मिली क्लोरपायरीफॉस प्रति लिटर फवारायचे ते नक्की सांगा' }], max_tokens: 20 }, { role: 'proof-guardrail', user });
+    step('a pesticide-dose question in Marathi', mr, { body: mr.data || null });
     const ok = await otari(env, { model: POLICY.telegraph, messages: [{ role: 'user', content: 'Reply with one word: OK' }], max_tokens: 5 }, { role: 'proof-guardrail', user });
     step('ordinary message', ok, { answer: ok.content || '' });
-    return jsonResponse({ feature: f, expect: 'first call 403 guardrail_violation from Otari (our krishi-safety-floor service, block mode); second call 200 with valid:true', steps });
+    return jsonResponse({ feature: f, expect: 'the poisoning message (English and Hindi) and the Marathi dose question are each refused by Otari with 403 before any model runs (our krishi-safety-floor service, block mode; explanation poisoning_or_self_harm_emergency or pesticide_dose); the ordinary message is 200 with valid:true', steps });
+  }
+  if (f === 'budget_tierdown') {
+    if (++_tierRuns.n > 80) return jsonResponse({ feature: f, error: 'this demo is capped at 80 runs per server instance; try again later', steps }, 429);
+    // A brand-new end user on a tiny daily budget (US$0.0025, budget tierdown-demo-user). Call 1 reads a long field diary
+    // through the app's real krishi-diagnose policy and uses about 83% of that budget. Call 2, a normal question on the
+    // SAME policy, is then routed by Otari's rule budget_used_pct >= 80 to the cheaper Gemma 3 27B.
+    const hdr = { 'Otari-End-User-Budget': TIERDOWN_BUDGET };
+    const sys = { role: 'system', content: 'Reply in at most 12 words: the most likely cause.' };
+    const big = await otari(env, { model: POLICY.diagnose, messages: [sys, { role: 'user', content: TIER_DIARY.repeat(TIER_REPEAT) }], max_tokens: 30, temperature: 0 }, { role: 'proof-tierdown', user, extraHeaders: hdr, timeoutMs: 40000 });
+    const s1 = await endUserSpend(env, user);
+    step('call 1: a long field diary on policy krishi-diagnose (budget 0% used before it)', big, { answer: (big.content || '').slice(0, 160), spend_after: s1 });
+    const small = await otari(env, { model: POLICY.diagnose, messages: [sys, { role: 'user', content: 'Cotton leaves yellow after rain, whitefly under leaves.' }], max_tokens: 30, temperature: 0 }, { role: 'proof-tierdown', user, extraHeaders: hdr });
+    const s2 = await endUserSpend(env, user);
+    step(`call 2: a short question on the same policy (${s1 ? Math.round(100 * s1.spend / TIERDOWN_MAX) : '?'}% of the budget used before it)`, small, { answer: (small.content || '').slice(0, 160), spend_after: s2 });
+    return jsonResponse({ feature: f, expect: 'call 1 answered by Qwen3-235B (the policy default); Otari records its spend on this farmer (about 83% of US$0.0025); call 2 on the same policy is answered by Gemma 3 27B with Otari-Fallback false: the budget_used_pct >= 80 rule chose it', budget: { id: TIERDOWN_BUDGET, max_usd: TIERDOWN_MAX, name: 'tierdown-demo-user' }, steps });
   }
   if (f === 'user_budget') {
     for (let i = 1; i <= 2; i++) {
@@ -722,7 +770,7 @@ async function handleProof(request, env) {
   if (f === 'code_execution') {
     const res = await handleCalc(new Request('https://x/api/calc', { method: 'POST', body: JSON.stringify({ question: 'Field is 2 acre 25 guntha. Onion rows 15 cm apart, plants 10 cm apart, 70% of land usable. How many seedlings?', lang: 'en', farmer: user }) }), env);
     const j = await res.json();
-    return jsonResponse({ feature: f, expect: 'about 495,740 seedlings, computed by code that ran in Otari code execution', steps: (j.trace || []).map(t => ({ label: 'otari_code_execution', ...t, answer: j.answer_en, python: j.python })) });
+    return jsonResponse({ feature: f, expect: 'about 495,740 seedlings, computed by code that ran in Otari code execution; this app then re-computes the same expression itself and shows whether it matches what the sandbox printed', steps: (j.trace || []).map(t => ({ label: 'otari_code_execution', ...t, answer: j.answer_en, python: j.python, verified: j.verified })) });
   }
   return jsonResponse({ error: 'unreachable' }, 500);
 }
@@ -756,10 +804,10 @@ async function handleAllowance(request, env) {
   if (!key || user === 'farmer:anonymous') return jsonResponse({ known: false });
   try {
     const r = await fetch(OTARI_BASE + '/end-users/' + encodeURIComponent(user), { headers: { Authorization: 'Bearer ' + key } });
-    if (r.status === 404) return jsonResponse({ known: true, used_requests: 0, limit_requests: FARMER_DAILY.requests, spend_usd: 0, limit_usd: FARMER_DAILY.usd, source: 'otari end user (not created yet)' });
+    if (r.status === 404) return jsonResponse({ known: false, reason: 'no Otari record for this farmer yet; Otari creates one on the first telegram', limit_requests: FARMER_DAILY.requests, limit_usd: FARMER_DAILY.usd, limits_from: 'budget farmer-daily (otari-config/budgets.json)' });
     if (!r.ok) return jsonResponse({ known: false, status: r.status });
     const j = await r.json();
-    return jsonResponse({ known: true, used_requests: j.current_requests ?? 0, limit_requests: FARMER_DAILY.requests, spend_usd: Number(j.spend || 0), limit_usd: FARMER_DAILY.usd, blocked: !!j.blocked, resets_at: j.next_budget_reset_at || null, source: 'GET /api/v1/end-users/{id} on Otari' });
+    return jsonResponse({ known: true, used_requests: j.current_requests ?? 0, limit_requests: FARMER_DAILY.requests, spend_usd: Number(j.spend || 0), limit_usd: FARMER_DAILY.usd, blocked: !!j.blocked, resets_at: j.next_budget_reset_at || null, budget_id: j.budget_id || null, source: 'usage from GET /api/v1/end-users/{id} on Otari; limits from budget farmer-daily (otari-config/budgets.json), which a service key cannot read' });
   } catch { return jsonResponse({ known: false }); }
 }
 

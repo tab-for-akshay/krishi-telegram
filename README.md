@@ -12,6 +12,33 @@ Entry for the Mozilla Otari hackathon **"Developers Wilding: Online"** (DoraHack
 - **Evidence of each feature working, with Otari request ids:** [`evidence/README.md`](evidence/README.md)
 - **Review rounds:** [`OTARI_ROUNDS.md`](OTARI_ROUNDS.md) · **Feedback for the Otari team:** [`OTARI_FEEDBACK.md`](OTARI_FEEDBACK.md)
 
+## Judge's 60 seconds
+
+Every Otari feature can be checked live in one click on the proof page, or from a terminal. Each command runs real requests through Otari from this app's server and prints Otari's own response headers (`served` is `Otari-Provider:Otari-Model`, `fallback` is `Otari-Fallback`, `request_id` is `Otari-Request-ID`):
+
+```
+B=https://krishi-telegram-otari.vercel.app
+curl -s "$B/api/proof?f=budget_tierdown" | jq '.steps[] | {label, served, fallback, spend_after}'
+curl -s "$B/api/proof?f=guardrail"       | jq '.steps[] | {label, status, body}'
+curl -s "$B/api/proof?f=user_budget"     | jq '.steps[] | {label, status, error_code, budget_scope}'
+curl -s "$B/api/proof?f=routing"         | jq '.steps[] | {label, served, fallback, attempts}'
+curl -s "$B/api/proof?f=mcp"             | jq '.steps[] | {label, served, answer, note}'
+curl -s "$B/api/proof?f=web_search"      | jq '.steps[] | {label, served, sources}'
+curl -s "$B/api/proof?f=code_execution"  | jq '.steps[] | {label, served, tool_fee_usd, verified}'
+```
+
+| Rubric line | What to look at | Live check | Config |
+|---|---|---|---|
+| Open-weight model (20) + two or more for different purposes (10) | Gateway receipt under any telegram: Qwen3-235B diagnoses, Gemma 3 27B writes Hindi/Marathi, Qwen3Guard-Gen-8B judges | main page | `routing-policies.json` |
+| Model routing and fallbacks | Self-hosted 9B overflows, Otari falls over to Qwen3-235B in the same request (`Otari-Fallback: true`, attempt 2) | `f=routing` | `krishi-private` |
+| MCP integrations | Our `find_kvk` MCP server, called by Mistral Small 3.2 through Otari | `f=mcp` | `mcp-servers.json` |
+| Web search | One Otari web search; only links from `otari_tool_calls` are shown | `f=web_search` | |
+| Code execution | Otari sandbox does the field maths; the app re-computes each expression and shows whether it matches | `f=code_execution` | `krishi-calc` |
+| Budgets and spending limits | A new farmer near their budget is routed by `budget_used_pct >= 80` from Qwen3-235B to Gemma 3 27B, spend read back from Otari | `f=budget_tierdown` | `budgets.json`, `spend-ceilings.json` |
+| Multiple models in distinct roles | 7 policies, 7 models, each with one job | main page receipt | `routing-policies.json` |
+| Guardrails | Our safety floor as an Otari organisation guardrail in block mode: English, Hindi and Marathi harmful requests refused with 403 before any model | `f=guardrail` | `guardrails.json` |
+| Per-user budgets | Same farmer twice on a 1-request demo budget: 200 then 403 `budget_exceeded`, scope `user`; the main page shows each farmer's own usage from Otari | `f=user_budget` | `service-keys.json` |
+
 ## What it does
 
 A farmer in India types a crop problem in English, Hindi or Marathi. They get back a telegram: at most 20 words, in their language written in Roman letters, with Morse audio, plus the address of their local ICAR Krishi Vigyan Kendra (KVK, the government farm science centre). Two extra buttons: **Find a source** (what an Indian extension page says) and **Field maths telegram** (area, plant counts, drip time, worked out by real code).
@@ -50,7 +77,8 @@ Everything the app relies on in the Otari dashboard is exported as JSON in [`ota
 | File | What it is |
 |---|---|
 | `routing-policies.json` | The 7 `krishi-*` policies: targets, `on_failure` fallbacks, and the `budget_used_pct >= 80` tier-down on `krishi-diagnose` |
-| `budgets.json` | `krishi-app-monthly` (US$1/month), `farmer-daily` (US$0.05 and 40 requests per farmer per day), `farmer-demo-capped` (1 request per farmer per day, used on the proof page) |
+| `budgets.json` | `krishi-app-monthly` (US$1/month), `farmer-daily` (US$0.05 and 40 requests per farmer per day), `farmer-demo-capped` (1 request per farmer per day, proof page), `tierdown-demo-user` (US$0.0025 a day, the live tier-down check) |
+| `service-keys.json` | The app's two service keys (no secrets): which end-user budgets each may hand out |
 | `spend-ceilings.json` | The US$1 monthly ceiling on the app's service key, with its spend at export time |
 | `guardrails.json` | `krishi-safety-floor`: our `/guard` service registered as an organisation guardrail in **block** mode |
 | `mcp-servers.json` | `kvk-directory`: our `/mcp` server with its one allowed tool `find_kvk`, health "healthy" |
@@ -69,7 +97,7 @@ Ids in these files are Otari object ids, not secrets. No key or token is in the 
 ## Run it yourself
 
 ```
-node --test     # 117 tests, no network (safety floor, red-team cases, Otari helpers, MCP server, Morse, pricing)
+node --test     # 118 tests, no network (safety floor, red-team cases, Otari helpers, MCP server, Morse, pricing)
 ```
 
 To call the live gateway from your machine:
