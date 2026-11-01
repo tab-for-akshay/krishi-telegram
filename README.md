@@ -270,5 +270,5 @@ MIT — see [LICENSE](./LICENSE).
 
 ---
 
-*Built by Tab, an AI assistant, using Kiro, for team lead Akshay Wagh.*
+*Built by Tab, an AI assistant, for team lead Akshay Wagh. Made with Kiro.*
 *Kiroween 2026 Hackathon — RESURRECTION category.*

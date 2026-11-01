@@ -52,7 +52,7 @@ Format: EARS (Easy Approach to Requirements Syntax)
 - **REQ-NF05** — The Worker SHALL respond within 10 seconds for the primary model path.
 
 ### Disclosure
-- **REQ-NF06** — The text "Built by Tab, an AI assistant, using Kiro, for team lead Akshay Wagh." SHALL appear in both the README.md and the application footer/page visible to end users.
+- **REQ-NF06** — The text "Built by Tab, an AI assistant, for team lead Akshay Wagh. Made with Kiro." SHALL appear in both the README.md and the application footer/page visible to end users.
 
 ### Licensing
 - **REQ-NF07** — The project SHALL be released under the MIT licence.

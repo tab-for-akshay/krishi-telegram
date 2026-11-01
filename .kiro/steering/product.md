@@ -21,4 +21,4 @@ A farmer types (or pastes) a question in English, Hindi, or Marathi. The app res
 4. **Offline-friendly UI** — single HTML page, minimal JS, no framework
 
 ## Disclosure
-"Built by Tab, an AI assistant, using Kiro, for team lead Akshay Wagh."
+"Built by Tab, an AI assistant, for team lead Akshay Wagh. Made with Kiro."
