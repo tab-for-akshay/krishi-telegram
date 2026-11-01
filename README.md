@@ -11,6 +11,7 @@ Entry for the Mozilla Otari hackathon **"Developers Wilding: Online"** (DoraHack
 - **Otari configuration, exported from the dashboard:** [`otari-config/`](otari-config/) (routing policies, budgets, spend ceiling, guardrail, MCP server, plus screenshots)
 - **Evidence of each feature working, with Otari request ids:** [`evidence/README.md`](evidence/README.md)
 - **Review rounds:** [`OTARI_ROUNDS.md`](OTARI_ROUNDS.md) · **Feedback for the Otari team:** [`OTARI_FEEDBACK.md`](OTARI_FEEDBACK.md)
+- **Contribution to Otari:** docs PR [mozilla-ai/otari#2746](https://github.com/mozilla-ai/otari/pull/2746) (a budget condition cannot admit a request its budget refuses), found while building this
 
 ## Judge's 60 seconds
 
