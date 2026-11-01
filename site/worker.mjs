@@ -66,6 +66,8 @@ const SELF_HARM_RE = /poison|pesticide[\s\S]{0,30}swallow|swallow[\s\S]{0,30}pes
 const INGEST_RE = /(drank|drink|drunk|drinking|ate|eaten|swallow\w*|consum\w*|pi\s*li|piya|pi\s*liya|pila|piyo|kha\s*li|khaya|khalla|pyayla|pyaala|pilay)[\s\S]{0,40}(pesticide|poison|insecticide|keet\s*n[a]+shak|zeh(e)?r|jahar|vish|kitaknashak|keetaknashak|daru\s*dawa)|(pesticide|poison|insecticide|keet\s*n[a]+shak|zeh(e)?r|jahar|vish|kitaknashak|keetaknashak)[\s\S]{0,40}(drank|drink|drunk|ate|eaten|swallow\w*|consum\w*|pi\s*li|piya|pi\s*liya|pila|kha\s*li|khaya|khalla|pyayla|pilay)/iu;
 
 // Pesticide name / dose patterns
+const EXTRA_HARM_RE = /(which|what|kaun\s*s[aie]|कौन\s*सा|कौनसा|कोणते|कोणता)[\s\S]{0,40}(pesticide|poison|insecticide|keet\s*nashak|कीटनाशक|कीटकनाशक|जहर|ज़हर|विष|दवा|औषध)[\s\S]{0,60}(drink|drinks|drunk|swallow|die|kill|पी|पिऊ|प्याय|मर|जीव)|(pesticide|poison|insecticide|कीटनाशक|कीटकनाशक|जहर|ज़हर|विष)[\s\S]{0,40}(if\s+a\s+person\s+drinks|if\s+someone\s+drinks|to\s+die|पीने\s*से|पीकर|पिऊन|प्यायल|प्यालो|प्याले|पी\s*लि|पी\s*ली|पिया|मरने|मरण|जीव\s*दे)|(पी\s*लिया|पी\s*ली|पिया|पीने|पीकर|प्यायल|प्यायले|प्यायला|पिऊन)[\s\S]{0,40}(कीटनाशक|कीटकनाशक|जहर|ज़हर|विष|दवा|स्प्रे|औषध)|(drank|drunk|swallowed|swallow|drinking)[\s\S]{0,40}(liquid|spray|bottle|tank|chemical)|(थक\s*गया|थक\s*गई|थक\s*चुका|परेशान|हार\s*गया|कंटाळलो|कंटाळले|थकलो|tired\s+of|can'?t\s+take)[\s\S]{0,80}(pesticide|poison|कीटनाशक|कीटकनाशक|जहर|ज़हर|विष|मर|die|dying)|आत्महत्या|खुदकुशी|ख़ुदकुशी|जान\s*दे|मर\s*जाना|मरना\s*चाह|जीना\s*नहीं|जीव\s*द्याय|मरायच|आयुष्य\s*संपव|end\s+it\s+all|no\s+reason\s+to\s+live|kill\s+(myself|me)\b|want\s+to\s+die|end\s+my\s+life/iu;
+const DOSE_DEV_RE = /खुराक|डोस|किती\s*मिली|कितने\s*(ml|मिली|एमएल)|कितना\s*(ml|मिली)|मिली\s*प्रति|ml\s*प्रति|प्रति\s*(लिटर|लीटर)\s*किती|सटीक\s*मात्रा|नक्की\s*(प्रमाण|मात्रा)|क्लोरपायरीफॉस|क्लोरपायरीफास|इमिडाक्लोप्रिड|मोनोक्रोटोफॉस|मोनोक्रोटोफास|एंडोसल्फान|पैराक्वाट|पॅराक्वॅट|फोरेट|प्रोफेनोफॉस|सायपरमेथ्रिन|साइपरमेथ्रिन|ग्लायफोसेट|ग्लाइफोसेट|डायमिथोएट|एसीफेट|थायमेथोक्झाम/iu;
 const PESTICIDE_NAMES_RE = /endosulfan|chlorpyrifos|monocrotophos|quinalphos|profenofos|cypermethrin|lambda[\s-]cyhalothrin|imidacloprid|acephate|malathion|dimethoate|phorate|carbofuran|methomyl|trichlorfon/iu;
 const DOSE_RE = /\b(dose|dosage|kitni\s+maatra|kiti\s+dose|kitna\s+dalen|kiti\s+ghyavi|concentration|ml\s+per|gram\s+per|gm\s+per|litre\s+per)\b/iu;
 
@@ -117,7 +119,7 @@ export const SAFETY_NATIVE = {
 export function safetyFloor(text, lang = 'en', kvkMatch = null) {
   const safetyLang = ['en', 'hi', 'mr'].includes(lang) ? lang : 'en';
 
-  if (SELF_HARM_RE.test(text) || INGEST_RE.test(text)) {
+  if (SELF_HARM_RE.test(text) || INGEST_RE.test(text) || EXTRA_HARM_RE.test(text)) {
     console.log('SAFETY_FLOOR_TRIGGERED: self_harm');
     return {
       blocked: true,
@@ -126,7 +128,7 @@ export function safetyFloor(text, lang = 'en', kvkMatch = null) {
       reason: 'self_harm',
     };
   }
-  if (PESTICIDE_NAMES_RE.test(text) || DOSE_RE.test(text)) {
+  if (PESTICIDE_NAMES_RE.test(text) || DOSE_RE.test(text) || DOSE_DEV_RE.test(text)) {
     console.log('SAFETY_FLOOR_TRIGGERED: pesticide_dose');
     let telegram;
     if (kvkMatch && kvkMatch.district) {
