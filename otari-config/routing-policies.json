@@ -1,0 +1,153 @@
+[
+  {
+    "name": "krishi-calc",
+    "spec": {
+      "spec_version": 1,
+      "select": [
+        {
+          "default": "deepinfra:Qwen/Qwen3.5-35B-A3B"
+        }
+      ],
+      "on_failure": [
+        "bedrock:meta.llama3-3-70b-instruct-v1:0"
+      ],
+      "guardrails": []
+    },
+    "source": "stored",
+    "workspace_id": "fc5971af-9779-4468-b4f3-1f6ed0075a89",
+    "is_dynamic": false,
+    "created_at": "2026-11-01T20:24:00.844039+00:00",
+    "updated_at": "2026-11-01T20:24:00.844041+00:00"
+  },
+  {
+    "name": "krishi-diagnose",
+    "spec": {
+      "spec_version": 1,
+      "select": [
+        {
+          "when": {
+            "budget_used_pct": {
+              "gte": 80.0
+            }
+          },
+          "target": "nebius:google/gemma-3-27b-it"
+        },
+        {
+          "default": "deepinfra:Qwen/Qwen3-235B-A22B-Instruct-2507"
+        }
+      ],
+      "on_failure": [
+        "bedrock:meta.llama3-3-70b-instruct-v1:0",
+        "nebius:google/gemma-3-27b-it"
+      ],
+      "guardrails": []
+    },
+    "source": "stored",
+    "workspace_id": "fc5971af-9779-4468-b4f3-1f6ed0075a89",
+    "is_dynamic": true,
+    "created_at": "2026-11-01T20:23:58.107875+00:00",
+    "updated_at": "2026-11-01T20:40:10.987792+00:00"
+  },
+  {
+    "name": "krishi-judge",
+    "spec": {
+      "spec_version": 1,
+      "select": [
+        {
+          "default": "ovhcloud:Qwen3Guard-Gen-8B"
+        }
+      ],
+      "on_failure": [
+        "deepinfra:meta-llama/Llama-Guard-4-12B"
+      ],
+      "guardrails": []
+    },
+    "source": "stored",
+    "workspace_id": "fc5971af-9779-4468-b4f3-1f6ed0075a89",
+    "is_dynamic": false,
+    "created_at": "2026-11-01T20:23:59.883678+00:00",
+    "updated_at": "2026-11-01T20:23:59.883681+00:00"
+  },
+  {
+    "name": "krishi-locate",
+    "spec": {
+      "spec_version": 1,
+      "select": [
+        {
+          "default": "ovhcloud:Mistral-Small-3.2-24B-Instruct-2506"
+        }
+      ],
+      "on_failure": [
+        "deepinfra:Qwen/Qwen3-235B-A22B-Instruct-2507"
+      ],
+      "guardrails": []
+    },
+    "source": "stored",
+    "workspace_id": "fc5971af-9779-4468-b4f3-1f6ed0075a89",
+    "is_dynamic": false,
+    "created_at": "2026-11-01T20:55:32.967385+00:00",
+    "updated_at": "2026-11-01T20:55:32.967387+00:00"
+  },
+  {
+    "name": "krishi-private",
+    "spec": {
+      "spec_version": 1,
+      "select": [
+        {
+          "default": "llamacpp:huihui-qwythos-9b-abliterated-q4k"
+        }
+      ],
+      "on_failure": [
+        "deepinfra:Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "nebius:google/gemma-3-27b-it"
+      ],
+      "guardrails": []
+    },
+    "source": "stored",
+    "workspace_id": "fc5971af-9779-4468-b4f3-1f6ed0075a89",
+    "is_dynamic": false,
+    "created_at": "2026-11-01T20:47:03.105215+00:00",
+    "updated_at": "2026-11-01T20:47:03.105217+00:00"
+  },
+  {
+    "name": "krishi-research",
+    "spec": {
+      "spec_version": 1,
+      "select": [
+        {
+          "default": "deepinfra:Qwen/Qwen3-235B-A22B-Instruct-2507"
+        }
+      ],
+      "on_failure": [
+        "deepinfra:Qwen/Qwen3.5-35B-A3B"
+      ],
+      "guardrails": []
+    },
+    "source": "stored",
+    "workspace_id": "fc5971af-9779-4468-b4f3-1f6ed0075a89",
+    "is_dynamic": false,
+    "created_at": "2026-11-01T20:40:12.013426+00:00",
+    "updated_at": "2026-11-01T20:40:12.013429+00:00"
+  },
+  {
+    "name": "krishi-telegraph",
+    "spec": {
+      "spec_version": 1,
+      "select": [
+        {
+          "default": "nebius:google/gemma-3-27b-it"
+        }
+      ],
+      "on_failure": [
+        "bedrock:google.gemma-3-12b-it",
+        "bedrock:meta.llama3-3-70b-instruct-v1:0"
+      ],
+      "guardrails": []
+    },
+    "source": "stored",
+    "workspace_id": "fc5971af-9779-4468-b4f3-1f6ed0075a89",
+    "is_dynamic": false,
+    "created_at": "2026-11-01T20:23:58.898656+00:00",
+    "updated_at": "2026-11-01T20:23:58.898659+00:00"
+  }
+]

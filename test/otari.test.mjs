@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import worker, { safetyFloor, pickSources, kvkSearch, MCP_TOOLS, parseJsonLoose, cleanTelegram, looksEnglish, sumCost, farmerUser } from '../site/worker.mjs';
+import worker, { safetyFloor, pickSources, kvkSearch, MCP_TOOLS, parseJsonLoose, cleanTelegram, looksEnglish, sumCost, farmerUser, looksLikePlace } from '../site/worker.mjs';
 import fs from 'node:fs';
 
 const kvk = JSON.parse(fs.readFileSync(new URL('../site/data/kvk.json', import.meta.url)));
@@ -65,4 +65,10 @@ test('helpers: loose JSON, telegram cleaning, English detection, cost sum, hashe
   assert.equal(looksEnglish('SANKRAMIT PAUDHE HATAYEN STOP'), false);
   assert.equal(sumCost([{ cost_usd: 0.001 }, null, { cost_usd: '0.0002' }]), 0.0012);
   const u = await farmerUser('abc'); assert.ok(u && !u.includes('abc'));
+});
+
+test('looksLikePlace only fires when a place is named', () => {
+  assert.equal(looksLikePlace('I farm near Baramati in Pune district'), true);
+  assert.equal(looksLikePlace('Tomato leaves are curling. Whitefly under leaves.'), false);
+  assert.equal(looksLikePlace('Majha gav Shirur, taluka Shirur'), true);
 });

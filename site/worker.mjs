@@ -66,6 +66,8 @@ const SELF_HARM_RE = /poison|pesticide[\s\S]{0,30}swallow|swallow[\s\S]{0,30}pes
 const INGEST_RE = /(drank|drink|drunk|drinking|ate|eaten|swallow\w*|consum\w*|pi\s*li|piya|pi\s*liya|pila|piyo|kha\s*li|khaya|khalla|pyayla|pyaala|pilay)[\s\S]{0,40}(pesticide|poison|insecticide|keet\s*n[a]+shak|zeh(e)?r|jahar|vish|kitaknashak|keetaknashak|daru\s*dawa)|(pesticide|poison|insecticide|keet\s*n[a]+shak|zeh(e)?r|jahar|vish|kitaknashak|keetaknashak)[\s\S]{0,40}(drank|drink|drunk|ate|eaten|swallow\w*|consum\w*|pi\s*li|piya|pi\s*liya|pila|kha\s*li|khaya|khalla|pyayla|pilay)/iu;
 
 // Pesticide name / dose patterns
+const EXTRA_HARM_RE = /(which|what|kaun\s*s[aie]|कौन\s*सा|कौनसा|कोणते|कोणता)[\s\S]{0,40}(pesticide|poison|insecticide|keet\s*nashak|कीटनाशक|कीटकनाशक|जहर|ज़हर|विष|दवा|औषध)[\s\S]{0,60}(drink|drinks|drunk|swallow|die|kill|पी|पिऊ|प्याय|मर|जीव)|(pesticide|poison|insecticide|कीटनाशक|कीटकनाशक|जहर|ज़हर|विष)[\s\S]{0,40}(if\s+a\s+person\s+drinks|if\s+someone\s+drinks|to\s+die|पीने\s*से|पीकर|पिऊन|प्यायल|प्यालो|प्याले|पी\s*लि|पी\s*ली|पिया|मरने|मरण|जीव\s*दे)|(पी\s*लिया|पी\s*ली|पिया|पीने|पीकर|प्यायल|प्यायले|प्यायला|पिऊन)[\s\S]{0,40}(कीटनाशक|कीटकनाशक|जहर|ज़हर|विष|दवा|स्प्रे|औषध)|(drank|drunk|swallowed|swallow|drinking)[\s\S]{0,40}(liquid|spray|bottle|tank|chemical)|(थक\s*गया|थक\s*गई|थक\s*चुका|परेशान|हार\s*गया|कंटाळलो|कंटाळले|थकलो|tired\s+of|can'?t\s+take)[\s\S]{0,80}(pesticide|poison|कीटनाशक|कीटकनाशक|जहर|ज़हर|विष|मर|die|dying)|आत्महत्या|खुदकुशी|ख़ुदकुशी|जान\s*दे|मर\s*जाना|मरना\s*चाह|जीना\s*नहीं|जीव\s*द्याय|मरायच|आयुष्य\s*संपव|end\s+it\s+all|no\s+reason\s+to\s+live|kill\s+(myself|me)\b|want\s+to\s+die|end\s+my\s+life/iu;
+const DOSE_DEV_RE = /खुराक|डोस|किती\s*मिली|कितने\s*(ml|मिली|एमएल)|कितना\s*(ml|मिली)|मिली\s*प्रति|ml\s*प्रति|प्रति\s*(लिटर|लीटर)\s*किती|सटीक\s*मात्रा|नक्की\s*(प्रमाण|मात्रा)|क्लोरपायरीफॉस|क्लोरपायरीफास|इमिडाक्लोप्रिड|मोनोक्रोटोफॉस|मोनोक्रोटोफास|एंडोसल्फान|पैराक्वाट|पॅराक्वॅट|फोरेट|प्रोफेनोफॉस|सायपरमेथ्रिन|साइपरमेथ्रिन|ग्लायफोसेट|ग्लाइफोसेट|डायमिथोएट|एसीफेट|थायमेथोक्झाम/iu;
 const PESTICIDE_NAMES_RE = /endosulfan|chlorpyrifos|monocrotophos|quinalphos|profenofos|cypermethrin|lambda[\s-]cyhalothrin|imidacloprid|acephate|malathion|dimethoate|phorate|carbofuran|methomyl|trichlorfon/iu;
 const DOSE_RE = /\b(dose|dosage|kitni\s+maatra|kiti\s+dose|kitna\s+dalen|kiti\s+ghyavi|concentration|ml\s+per|gram\s+per|gm\s+per|litre\s+per(?!\s+(?:hour|hr|minute|min|second|sec|day)\b))\b/iu;
 
@@ -93,6 +95,21 @@ export const SAFETY_TELEGRAMS = {
 };
 
 /**
+ * Fixed Devanagari safety telegrams for HI and MR.
+ * These are shown as the `native` overlay when the safety floor triggers.
+ */
+export const SAFETY_NATIVE = {
+  emergency: {
+    hi: 'रुकें — आपातकाल — अभी 108 पर कॉल करें — 112 पर भी कॉल करें — टेली-मानस 14416 — देरी मत करें — तुरंत मदद लें',
+    mr: 'थांबा — आणीबाणी — आत्ता 108 ला कॉल करा — 112 लाही कॉल करा — टेली-मानस 14416 — उशीर करू नका — लगेच मदत घ्या',
+  },
+  kvk: {
+    hi: 'केवीके विशेषज्ञ से सलाह लें — कीटनाशक मात्रा के लिए विशेषज्ञ चाहिए — अपने स्थानीय कृषि विज्ञान केंद्र पर कॉल करें',
+    mr: 'केव्हीके तज्ञांकडे जा — कीटकनाशक मात्रेसाठी तज्ञ लागतो — तुमच्या स्थानिक कृषी विज्ञान केंद्राला कॉल करा',
+  },
+};
+
+/**
  * Check text for safety-critical content.
  * @param {string} text
  * @param {string} [lang='en']
@@ -102,15 +119,16 @@ export const SAFETY_TELEGRAMS = {
 export function safetyFloor(text, lang = 'en', kvkMatch = null) {
   const safetyLang = ['en', 'hi', 'mr'].includes(lang) ? lang : 'en';
 
-  if (SELF_HARM_RE.test(text) || INGEST_RE.test(text)) {
+  if (SELF_HARM_RE.test(text) || INGEST_RE.test(text) || EXTRA_HARM_RE.test(text)) {
     console.log('SAFETY_FLOOR_TRIGGERED: self_harm');
     return {
       blocked: true,
       telegram: SAFETY_TELEGRAMS.emergency[safetyLang],
+      native: (safetyLang === 'hi' || safetyLang === 'mr') ? SAFETY_NATIVE.emergency[safetyLang] : null,
       reason: 'self_harm',
     };
   }
-  if (PESTICIDE_NAMES_RE.test(text) || DOSE_RE.test(text)) {
+  if (PESTICIDE_NAMES_RE.test(text) || DOSE_RE.test(text) || DOSE_DEV_RE.test(text)) {
     console.log('SAFETY_FLOOR_TRIGGERED: pesticide_dose');
     let telegram;
     if (kvkMatch && kvkMatch.district) {
@@ -119,7 +137,12 @@ export function safetyFloor(text, lang = 'en', kvkMatch = null) {
     } else {
       telegram = SAFETY_TELEGRAMS.kvk[safetyLang];
     }
-    return { blocked: true, telegram, reason: 'pesticide_dose' };
+    return {
+      blocked: true,
+      telegram,
+      native: (safetyLang === 'hi' || safetyLang === 'mr') ? SAFETY_NATIVE.kvk[safetyLang] : null,
+      reason: 'pesticide_dose',
+    };
   }
   return { blocked: false };
 }
@@ -192,7 +215,7 @@ export const POLICY = {
   calc: 'krishi-calc',           // Qwen3.5-35B-A3B + otari_code_execution
   private: 'krishi-private',     // Huihui-Qwythos-9B (self-hosted, llama.cpp) -> Qwen3-235B -> Gemma-3-27B
   research: 'krishi-research',  // Qwen3-235B-A22B-Instruct -> Qwen3.5-35B (web search + MCP tool use)
-  locate: 'krishi-research',         // same tool-capable model, calls our KVK MCP server through Otari
+  locate: 'krishi-locate',       // Mistral-Small-3.2-24B -> Qwen3-235B (calls our KVK MCP server)         // same tool-capable model, calls our KVK MCP server through Otari
 };
 export const PRIVATE_MODEL = 'llamacpp:huihui-qwythos-9b-abliterated-q4k';
 const PRIVATE_HEALTH = 'https://tab-llm-p76jwv764jr9crggw-8080.app.github.dev/health';
@@ -255,6 +278,8 @@ export async function otari(env, body, { role, user, timeoutMs = 27000, extraHea
     return { ok: false, status: res.status, data, error: trace.error, trace };
   }
   trace.cost_usd = data.usage?.cost_usd ? Number(data.usage.cost_usd) : null;
+  // Gateway-run tools (code execution, web search) are billed on top of tokens: cost_usd minus the token estimate.
+  if (trace.cost_usd != null && data.usage?.estimated_cost != null) { const fee = trace.cost_usd - Number(data.usage.estimated_cost); if (fee > 0.0005) trace.tool_fee_usd = Math.round(fee * 1e6) / 1e6; }
   trace.tokens = data.usage?.total_tokens ?? null;
   const content = data.choices?.[0]?.message?.content || '';
   return { ok: true, status: res.status, data, content, trace };
@@ -354,7 +379,8 @@ export function locatePrompt() {
 }
 
 export function looksLikePlace(text) {
-  return /\b(district|dist\.?|taluka|tehsil|village|gaon|gav|jilla|zilla|near|in|from|at)\s+[A-Z][a-z]{2,}/.test(text) || /\b[A-Z][a-z]{3,}\b/.test(text.replace(/^[A-Z]/, ''));
+  // Only when the farmer actually names a place: a place word followed by a capitalised name.
+  return /\b(district|dist\.?|taluka|taluk|tehsil|tahsil|village|gaon|gav|jilla|zilla|jilha|near|from|in|at|mandal|block)\s+[A-Z][a-z]{2,}/.test(text);
 }
 
 async function runDiagnose(env, text, { privateRoute, user }) {
@@ -407,7 +433,7 @@ async function runLocate(env, text, user) {
   const r = await otari(env, {
     model: POLICY.locate,
     messages: [{ role: 'system', content: locatePrompt() }, { role: 'user', content: text }],
-    mcp_server_ids: [mcpId], max_tool_iterations: 3, max_tokens: 1500, temperature: 0,
+    mcp_server_ids: [mcpId], max_tool_iterations: 3, max_tokens: 600, temperature: 0,
   }, { role: 'locate-mcp', user, timeoutMs: 26000 });
   const j = r.ok ? parseJsonLoose(r.content) : null;
   r.trace.mcp = 'kvk-directory';
@@ -484,7 +510,7 @@ async function handleTelegram(request, env) {
   // Otari organisation guardrail — the same rules, served at /guard/validate — is what stops the request.)
   if (floor !== 'otari') {
     const safety = safetyFloor(text, lang, kvkMatch);
-    if (safety.blocked) return jsonResponse(telegramReply(safety.telegram, { kvk: kvkOut(kvkMatch), safety: safety.reason, stopped_by: 'code floor', trace: [], otari_cost_usd: 0 }));
+    if (safety.blocked) return jsonResponse(telegramReply(safety.telegram, { native: safety.native || null, kvk: kvkOut(kvkMatch), safety: safety.reason, stopped_by: 'code floor', trace: [], otari_cost_usd: 0 }));
   }
 
   // Diagnose and (when no KVK chosen) locate the farmer's KVK via MCP, in parallel.
@@ -536,7 +562,7 @@ async function handleTelegram(request, env) {
   }
   // Code floor AFTER the models too.
   const post = safetyFloor(telegram + ' ' + adviceEn, lang, kvkMatch);
-  if (post.blocked) return jsonResponse(telegramReply(post.telegram, { cause, kvk: kvkOut(kvkMatch), safety: post.reason, stopped_by: 'code floor (output)', trace: traces, otari_cost_usd: sumCost(traces) }));
+  if (post.blocked) return jsonResponse(telegramReply(post.telegram, { native: post.native || null, cause, kvk: kvkOut(kvkMatch), safety: post.reason, stopped_by: 'code floor (output)', trace: traces, otari_cost_usd: sumCost(traces) }));
 
   return jsonResponse(telegramReply(telegram, {
     cause, actions, telegram_en: telegramEn, kvk: kvkOut(kvkMatch),
@@ -720,6 +746,23 @@ function jsonResponse(data, status = 200) {
 // ---------------------------------------------------------------------------
 // Worker export
 // ---------------------------------------------------------------------------
+
+// Per-farmer allowance: read this farmer's Otari end user with the service key (GET /end-users/{id}).
+export const FARMER_DAILY = { requests: 40, usd: 0.05 };
+async function handleAllowance(request, env) {
+  const url = new URL(request.url);
+  const user = await farmerUser(url.searchParams.get('farmer') || '');
+  const key = secret(env, 'OTARI_KEY');
+  if (!key || user === 'farmer:anonymous') return jsonResponse({ known: false });
+  try {
+    const r = await fetch(OTARI_BASE + '/end-users/' + encodeURIComponent(user), { headers: { Authorization: 'Bearer ' + key } });
+    if (r.status === 404) return jsonResponse({ known: true, used_requests: 0, limit_requests: FARMER_DAILY.requests, spend_usd: 0, limit_usd: FARMER_DAILY.usd, source: 'otari end user (not created yet)' });
+    if (!r.ok) return jsonResponse({ known: false, status: r.status });
+    const j = await r.json();
+    return jsonResponse({ known: true, used_requests: j.current_requests ?? 0, limit_requests: FARMER_DAILY.requests, spend_usd: Number(j.spend || 0), limit_usd: FARMER_DAILY.usd, blocked: !!j.blocked, resets_at: j.next_budget_reset_at || null, source: 'GET /api/v1/end-users/{id} on Otari' });
+  } catch { return jsonResponse({ known: false }); }
+}
+
 export default {
   async fetch(request, env, _ctx) {
     const url = new URL(request.url);
@@ -730,6 +773,7 @@ export default {
     if (request.method === 'POST' && url.pathname === '/api/source') return handleSource(request, env);
     if (request.method === 'POST' && url.pathname === '/api/calc') return handleCalc(request, env);
     if (url.pathname === '/api/private-status') return handlePrivateStatus();
+    if (url.pathname === '/api/allowance') return handleAllowance(request, env);
     if (url.pathname === '/api/proof') return handleProof(request, env);
     if (url.pathname === '/mcp') return handleMcp(request, env);
     if (url.pathname === '/guard/validate' || url.pathname === '/guard/profiles') return handleGuard(request, env);

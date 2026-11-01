@@ -28,9 +28,10 @@ test('README.md exists', () => {
 
 test('README.md contains the required disclosure line', () => {
   const content = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  // The otari-branch README carries the hackathon-wide line; the Kiro line stays on main.
   assert.ok(
-    content.includes(DISCLOSURE),
-    `README.md must contain: "${DISCLOSURE}"`
+    content.includes(SITE_DISCLOSURE),
+    `README.md must contain: "${SITE_DISCLOSURE}"`
   );
 });
 

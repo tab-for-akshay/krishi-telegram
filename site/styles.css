@@ -801,3 +801,5 @@ body {
 .kt-source-list{margin:.4rem 0 0 1rem;font-size:.85rem}
 .kt-code{white-space:pre-wrap;font-size:.75rem;background:#1f1a14;color:#f5e9cf;padding:.5rem;border-radius:4px;overflow-x:auto}
 @media (max-width:600px){.kt-trace-table th:nth-child(2),.kt-trace-table td:nth-child(2){display:none}}
+
+.kt-allowance { font-size: 0.85rem; opacity: 0.8; margin: 0.4rem 0 0.6rem; }

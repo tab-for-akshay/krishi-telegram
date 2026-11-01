@@ -1,0 +1,26 @@
+[
+  {
+    "id": "30446812-b298-49c5-bff1-4da4e1f7a888",
+    "scope_type": "api_token",
+    "scope_id": "4ebea778-65c9-4281-81d6-e7a0cab1337c",
+    "provider_key_id": null,
+    "budget_id": "756f3c12-9191-45df-8089-69c5ca905677",
+    "name": "krishi app monthly ceiling",
+    "max_budget": 1.0,
+    "current_spend": 0.151646,
+    "reserved_spend": 0.0,
+    "token_limit": null,
+    "current_tokens": 122030,
+    "reserved_tokens": 0,
+    "request_limit": null,
+    "current_requests": 124,
+    "reserved_requests": 0,
+    "budget_duration_sec": null,
+    "reset_alignment": "calendar_month",
+    "period_start": "2026-11-01T00:00:00+00:00",
+    "period_end": "2026-12-01T00:00:00+00:00",
+    "created_at": "2026-11-01T20:15:57.274625+00:00",
+    "updated_at": "2026-11-01T20:55:28.875124+00:00",
+    "manageable": true
+  }
+]

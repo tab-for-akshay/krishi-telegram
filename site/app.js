@@ -487,6 +487,7 @@ document.addEventListener('DOMContentLoaded', () => {
       renderTelegram(data);
       lastResult = data;
       renderTrace(data);
+      showAllowance();
       const sc = document.getElementById('source-card'); if (sc) sc.hidden = true;
       const sb = document.getElementById('source-btn'); if (sb) { sb.hidden = !data.cause; sb.disabled = false; }
 
@@ -525,9 +526,9 @@ function farmerId() {
   } catch { return ''; }
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-const ROLE_LABEL = { diagnose: 'Diagnose (English)', 'diagnose-private': 'Diagnose on private model', telegraph: 'Write Hindi/Marathi telegram', 'telegraph-retry': 'Rewrite (was English)', judge: 'Safety judge', 'locate-mcp': 'Find KVK via MCP tool', 'source-websearch': 'Web search for a source', 'calc-code-exec': 'Code execution' };
+const ROLE_LABEL = { 'proof-routing': 'Fallback check', diagnose: 'Diagnose (English)', 'diagnose-private': 'Diagnose on private model', telegraph: 'Write Hindi/Marathi telegram', 'telegraph-retry': 'Rewrite (was English)', judge: 'Safety judge', 'locate-mcp': 'Find KVK via MCP tool', 'source-websearch': 'Web search for a source', 'calc-code-exec': 'Code execution' };
 function traceRows(trace) {
-  return (trace || []).map(t => `<tr><td>${esc(ROLE_LABEL[t.role] || t.role)}</td><td><code>${esc(t.requested)}</code></td><td>${t.served ? `<code>${esc(t.served)}</code>` : '<em>' + esc(t.error || '—') + '</em>'}${t.fallback ? ' <span class="kt-badge">fallback</span>' : ''}${t.verdict ? ' <span class="kt-badge">' + esc(t.verdict) + '</span>' : ''}${t.mcp ? ' <span class="kt-badge">MCP</span>' : ''}${t.note ? '<br><small>' + esc(t.note) + '</small>' : ''}</td><td>${t.ms ?? ''}</td><td>${t.cost_usd != null ? Number(t.cost_usd).toFixed(6) : ''}</td></tr>`).join('');
+  return (trace || []).map(t => `<tr><td>${esc(ROLE_LABEL[t.role] || t.role)}</td><td><code>${esc(t.requested)}</code></td><td>${t.served ? `<code>${esc(t.served)}</code>` : '<em>' + esc(t.error || '—') + '</em>'}${t.fallback ? ' <span class="kt-badge">fallback</span>' : ''}${t.verdict ? ' <span class="kt-badge">' + esc(t.verdict) + '</span>' : ''}${t.mcp ? ' <span class="kt-badge">MCP</span>' : ''}${t.tool_fee_usd ? '<br><small>gateway tool fee US$' + Number(t.tool_fee_usd).toFixed(4) + ' (the tool really ran in Otari)</small>' : ''}${t.note ? '<br><small>' + esc(t.note) + '</small>' : ''}</td><td>${t.ms ?? ''}</td><td>${t.cost_usd != null ? Number(t.cost_usd).toFixed(6) : ''}</td></tr>`).join('');
 }
 function renderTrace(data) {
   const card = document.getElementById('trace-card'); if (!card) return;
@@ -543,10 +544,23 @@ function renderTrace(data) {
   card.hidden = !(data.trace && data.trace.length) && !data.stopped_by;
 }
 
+
+// Per-farmer daily allowance, read from Otari's end-user record for this device's farmer id.
+function showAllowance() {
+  const el = document.getElementById('allowance'); if (!el) return;
+  const id = farmerId(); if (!id) return;
+  fetch('/api/allowance?farmer=' + encodeURIComponent(id)).then(r => r.json()).then(j => {
+    if (!j.known) { el.textContent = ''; return; }
+    const left = Math.max(0, j.limit_requests - j.used_requests);
+    el.textContent = `Your free daily allowance (an Otari per-user budget): ${j.used_requests} of ${j.limit_requests} gateway calls used today, ${left} left. One telegram uses about 3 calls.`;
+  }).catch(() => {});
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  showAllowance();
   // private route status
   const dot = document.getElementById('private-status');
-  if (dot) fetch('/api/private-status').then(r => r.json()).then(j => { dot.classList.add(j.awake ? 'kt-dot--on' : 'kt-dot--off'); dot.title = j.awake ? 'awake' : 'asleep: Otari will fall back to the open-weight policy'; }).catch(() => {});
+  if (dot) fetch('/api/private-status').then(r => r.json()).then(j => { dot.classList.add(j.awake ? 'kt-dot--on' : 'kt-dot--off'); dot.title = j.awake ? 'self-hosted model is awake' : 'cannot see the self-hosted model from here; if it is asleep, Otari falls back to Qwen3-235B'; }).catch(() => {});
 
   const sb = document.getElementById('source-btn');
   if (sb) {
@@ -583,7 +597,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('calc-telegram').textContent = j.telegram;
         document.getElementById('calc-answer').textContent = j.answer_en || (j.stopped_by ? 'Stopped by ' + j.stopped_by : '');
         document.getElementById('calc-python').textContent = j.python || '(no code returned)';
-        document.getElementById('calc-receipt').textContent = (j.trace || []).map(t => `${ROLE_LABEL[t.role] || t.role}: ${t.served || t.error} ${t.ms ? t.ms + ' ms' : ''} ${t.cost_usd != null ? 'US$' + Number(t.cost_usd).toFixed(6) : ''}`).join(' · ');
+        document.getElementById('calc-receipt').textContent = (j.trace || []).map(t => `${ROLE_LABEL[t.role] || t.role}: ${t.served || t.error} ${t.ms ? t.ms + ' ms' : ''} ${t.cost_usd != null ? 'US$' + Number(t.cost_usd).toFixed(6) : ''}${t.tool_fee_usd ? ' (includes Otari code-execution fee US$' + Number(t.tool_fee_usd).toFixed(4) + ': the sandbox ran)' : ''}`).join(' · ') + ' · Otari does not yet return the executed code itself, so the code shown is the model’s own copy of what it ran.';
         card.hidden = false;
       }
     } catch { er.textContent = 'Network error.'; er.hidden = false; }

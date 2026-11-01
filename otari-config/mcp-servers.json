@@ -1,0 +1,27 @@
+[
+  {
+    "id": "40d478d8-768a-4e08-a953-a88b78b207ce",
+    "workspace_id": "fc5971af-9779-4468-b4f3-1f6ed0075a89",
+    "name": "kvk-directory",
+    "url": "https://krishi-telegram-otari.sites.tab.bot/mcp",
+    "purpose_hint": "Look up the ICAR Krishi Vigyan Kendra (KVK) for an Indian state and district.",
+    "allowed_tools": [
+      "find_kvk"
+    ],
+    "enabled": true,
+    "has_token": true,
+    "health": {
+      "status": "healthy",
+      "checked_at": "2026-11-01T20:29:20.426594+00:00",
+      "error": null,
+      "http_status": null,
+      "tool_count": 1,
+      "missing_allowed_tools": [],
+      "tools": [
+        "find_kvk"
+      ]
+    },
+    "created_at": "2026-11-01T20:29:20.256547+00:00",
+    "updated_at": "2026-11-01T20:29:20.427111+00:00"
+  }
+]

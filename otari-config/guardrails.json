@@ -1,0 +1,19 @@
+[
+  {
+    "id": "cb55d3f8-430c-4711-a9ce-59012271c3c9",
+    "profile": "krishi-safety-floor",
+    "url": "https://krishi-telegram-otari.sites.tab.bot/guard",
+    "has_credential": true,
+    "definition_id": null,
+    "mode": "block",
+    "on_unavailable": "monitor",
+    "validate_kwargs": null,
+    "enabled": true,
+    "applies_to_all_workspaces": false,
+    "workspace_ids": [
+      "fc5971af-9779-4468-b4f3-1f6ed0075a89"
+    ],
+    "created_at": "2026-11-01T20:29:21.228879+00:00",
+    "updated_at": "2026-11-01T20:30:23.527645+00:00"
+  }
+]
