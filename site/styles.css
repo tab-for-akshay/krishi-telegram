@@ -630,3 +630,158 @@ body {
     print-color-adjust: exact;
   }
 }
+
+/* ==========================================================================
+   Field-ready v2 additions
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Text input (district field)
+   -------------------------------------------------------------------------- */
+.kt-input {
+  appearance: none;
+  background: var(--kt-paper);
+  border: 1px solid var(--kt-paper-edge);
+  border-radius: var(--kt-radius);
+  color: var(--kt-ink);
+  font-family: var(--kt-font-body);
+  font-size: 1rem;
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+  max-width: 20rem;
+}
+
+.kt-input:focus {
+  border-color: var(--kt-focus);
+  outline: 2px solid var(--kt-focus);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Cause line inside the telegram card
+   -------------------------------------------------------------------------- */
+.kt-telegram-cause {
+  font-family: var(--kt-font-body);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  color: var(--kt-ink-light);
+  text-transform: uppercase;
+  padding: 0.25rem 0;
+  margin-bottom: 0.25rem;
+  border-left: 3px solid var(--kt-paper-edge);
+  padding-left: 0.5rem;
+}
+
+/* --------------------------------------------------------------------------
+   Morse visual strip
+   -------------------------------------------------------------------------- */
+.kt-morse-strip-container {
+  margin: 0.75rem 0;
+  overflow-x: auto;
+  padding: 0.5rem 0;
+}
+
+.kt-morse-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  align-items: center;
+  min-height: 1.5rem;
+}
+
+.kt-morse-dot,
+.kt-morse-dash {
+  display: inline-block;
+  background: var(--kt-ink);
+  border-radius: 1px;
+  transition: background 0.05s, transform 0.05s;
+  vertical-align: middle;
+}
+
+.kt-morse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.kt-morse-dash {
+  width: 18px;
+  height: 6px;
+}
+
+.kt-morse-dot.kt-morse-active,
+.kt-morse-dash.kt-morse-active {
+  background: var(--kt-red);
+  transform: scale(1.4);
+}
+
+.kt-morse-letter-gap {
+  display: inline-block;
+  width: 6px;
+}
+
+.kt-morse-word-gap {
+  display: inline-block;
+  width: 16px;
+}
+
+.kt-morse-wpm {
+  font-size: 0.7rem;
+  color: var(--kt-ink-light);
+  margin-top: 0.3rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* --------------------------------------------------------------------------
+   KVK card (shown under the telegram)
+   -------------------------------------------------------------------------- */
+.kt-kvk-card {
+  background: var(--kt-paper-dark);
+  border: 1px solid var(--kt-paper-edge);
+  border-radius: var(--kt-radius);
+  box-shadow: var(--kt-shadow);
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  max-width: 640px;
+  width: 100%;
+}
+
+.kt-kvk-title {
+  font-family: var(--kt-font-body);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--kt-ink-light);
+  margin-bottom: 0.6rem;
+  border-bottom: 1px solid var(--kt-paper-edge);
+  padding-bottom: 0.4rem;
+}
+
+.kt-kvk-name {
+  font-size: 0.85rem;
+  font-weight: bold;
+  color: var(--kt-ink);
+  margin-bottom: 0.35rem;
+  line-height: 1.4;
+}
+
+.kt-kvk-host {
+  font-size: 0.8rem;
+  color: var(--kt-ink-light);
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+
+.kt-kvk-source {
+  font-size: 0.75rem;
+  color: var(--kt-red);
+  text-decoration: none;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.kt-kvk-source:hover,
+.kt-kvk-source:focus {
+  text-decoration: underline;
+}

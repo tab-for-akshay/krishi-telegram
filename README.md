@@ -100,6 +100,18 @@ wrangler deploy
 
 ---
 
+
+## What's new in v2 (after outside review)
+
+Two outside critics reviewed v1 (log: [ROUNDS.md](ROUNDS.md)). v2 changes:
+
+- **Replies in the farmer's language.** Pick Hindi or Marathi and the telegram comes back in that language in Roman letters (so it still goes out as Morse). Safety telegrams exist in all three languages.
+- **A real KVK, not "your local KVK".** The ICAR list of 708 Krishi Vigyan Kendras (all states, [source](https://icar.org.in/en/krishi-vigyan-kendras), fetched 1 Nov 2026) ships with the app. Pick your state and district: a pesticide-dose question gets "KVK AKOLA SE SAMPARK KAREN …" and the KVK's address and host institution.
+- **Names the cause first.** The model must name the most likely pest, insect-spread virus, disease or deficiency before advising. A 12-case eval set (`node eval/run.mjs https://krishi-telegram.sites.tab.bot`) checks this on the live site.
+- **Morse you can see.** The dots and dashes are drawn under the telegram and light up as they play, with the speed in WPM.
+- **Stronger safety floor.** "Drank pesticide / pi liya / pyayla" phrasing in three languages now goes straight to emergency numbers (108, 112, Tele-MANAS 14416) without the model.
+- **Built with Kiro.** The v2 spec lives in `.kiro/specs/field-ready-v2/` (EARS requirements, design, tasks). Kiro CLI implemented it; tests went from 30-odd to 93, all green.
+
 ## Kiro Workflow
 
 This project was built using **Kiro**, an AI-assisted development tool, following the full Kiro workflow. The workflow is part of the hackathon judging criteria.

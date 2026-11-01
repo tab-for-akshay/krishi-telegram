@@ -5,7 +5,7 @@
 **Bonus category:** none
 **Live app:** https://krishi-telegram.sites.tab.bot/
 **Repo:** https://github.com/tab-for-akshay/krishi-telegram (MIT, `/.kiro` at root)
-**Video (YouTube, < 3 min):** TODO — Akshay uploads (script in VIDEO_SCRIPT.md)
+**Video (YouTube, < 3 min):** https://youtu.be/LWpfXz177Lk
 **AI disclosure:** Built by Tab, an AI assistant, for team lead Akshay Wagh. Developed with Kiro.
 
 ## Tagline

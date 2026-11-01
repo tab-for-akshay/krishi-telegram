@@ -20,8 +20,7 @@ const MORSE_TABLE = {
 
 /**
  * Encode a string to Morse code.
- * Letter gap = 1 space, word gap = 3 spaces (between single-space separators
- * the total becomes: letter-end-space + word-gap + letter-start-space = 3).
+ * Letter gap = 1 space, word gap = 3 spaces.
  * Output uses dots and dashes; letters separated by ' ', words by '   ' (3 spaces).
  *
  * @param {string} text
@@ -58,39 +57,115 @@ export function costPaise(wordCount) {
 }
 
 // ---------------------------------------------------------------------------
-// Safety floor
+// Safety floor — language-aware
 // ---------------------------------------------------------------------------
 
 // Self-harm / poisoning patterns (English, Hindi, Marathi transliteration)
-const SELF_HARM_RE = /poison|pesticide[\s\S]{0,30}swallow|swallow[\s\S]{0,30}pesticide|keet[\s\S]{0,10}naashak[\s\S]{0,10}pi|zeher[\s\S]{0,10}pi|zeher\s+pina|aatmahatya|suicide|self[\s-]harm|poisoning\s+symptom|zeher\s+ke\s+lakshan|zeher[\s\S]{0,10}lakshan|keet\s*naashak\s*kha|naashak\s+pi|pi\s+li[\s\S]{0,20}naashak/iu;
+const SELF_HARM_RE = /poison|pesticide[\s\S]{0,30}swallow|swallow[\s\S]{0,30}pesticide|keet[\s\S]{0,10}naashak[\s\S]{0,10}pi|zeher[\s\S]{0,10}pi|zeher\s+pina|aatmahatya|suicide|self[\s-]harm|poisoning\s+symptom|zeher\s+ke\s+lakshan|zeher[\s\S]{0,10}lakshan|keet\s*naashak\s*kha|naashak\s+pi|pi\s+li[\s\S]{0,20}naashak/iu
+// v2 (outside review): ingestion phrasing in English / Hinglish / Marathi, either word order
+const INGEST_RE = /(drank|drink|drunk|drinking|ate|eaten|swallow\w*|consum\w*|pi\s*li|piya|pi\s*liya|pila|piyo|kha\s*li|khaya|khalla|pyayla|pyaala|pilay)[\s\S]{0,40}(pesticide|poison|insecticide|keet\s*n[a]+shak|zeh(e)?r|jahar|vish|kitaknashak|keetaknashak|daru\s*dawa)|(pesticide|poison|insecticide|keet\s*n[a]+shak|zeh(e)?r|jahar|vish|kitaknashak|keetaknashak)[\s\S]{0,40}(drank|drink|drunk|ate|eaten|swallow\w*|consum\w*|pi\s*li|piya|pi\s*liya|pila|kha\s*li|khaya|khalla|pyayla|pilay)/iu;
 
 // Pesticide name / dose patterns
 const PESTICIDE_NAMES_RE = /endosulfan|chlorpyrifos|monocrotophos|quinalphos|profenofos|cypermethrin|lambda[\s-]cyhalothrin|imidacloprid|acephate|malathion|dimethoate|phorate|carbofuran|methomyl|trichlorfon/iu;
 const DOSE_RE = /\b(dose|dosage|kitni\s+maatra|kiti\s+dose|kitna\s+dalen|kiti\s+ghyavi|concentration|ml\s+per|gram\s+per|gm\s+per|litre\s+per)\b/iu;
 
-const EMERGENCY_TELEGRAM =
-  'STOP EMERGENCY STOP CALL 108 NOW STOP CALL 112 NOW STOP ' +
-  'TELE-MANAS HELPLINE 14416 STOP DO NOT DELAY STOP GET HELP IMMEDIATELY STOP';
+/**
+ * Safety telegrams per language (Roman script throughout so Morse works).
+ * EN is the authoritative version; HI and MR are Romanized equivalents.
+ */
+export const KVK_NAMED = {
+  en: d => `CONTACT KVK ${d} STOP PESTICIDE DOSE REQUIRES EXPERT ADVICE STOP DO NOT SELF-MEDICATE CROPS STOP`,
+  hi: d => `KVK ${d} SE SAMPARK KAREN STOP KEETNAASHAK MAATRA KE LIYE VISHESHAGYA KI SALAH ZAROORI STOP KHUD SE DAWA MAT DALEN STOP`,
+  mr: d => `KVK ${d} SHI SAMPARK KARA STOP KEETNAASHAK MATRESATHI TADNYANCHA SALLA AVASHYAK STOP SWATAHUN AUSHADH FAVARU NAKA STOP`,
+};
 
-const KVK_REDIRECT_TELEGRAM =
-  'CONSULT KVK EXPERT STOP PESTICIDE DOSE REQUIRES EXPERT ADVICE STOP ' +
-  'CALL YOUR LOCAL KRISHI VIGYAN KENDRA STOP DO NOT SELF-MEDICATE CROPS STOP';
+export const SAFETY_TELEGRAMS = {
+  emergency: {
+    en: 'STOP EMERGENCY STOP CALL 108 NOW STOP CALL 112 NOW STOP TELE-MANAS HELPLINE 14416 STOP DO NOT DELAY STOP GET HELP IMMEDIATELY STOP',
+    hi: 'STOP AAPAT STHITI STOP TURANT 108 PE CALL KAREN STOP 112 PE BHI CALL KAREN STOP TELE-MANAS 14416 STOP DERI MAT KAREN STOP TURANT MADAD LEN STOP',
+    mr: 'STOP NADKAT STHITI STOP LAGECH 108 LA CALL KARA STOP 112 LA PAN CALL KARA STOP TELE-MANAS 14416 STOP USHEER KARU NAKA STOP LAGECH MADAD GYA STOP',
+  },
+  kvk: {
+    en: 'CONSULT KVK EXPERT STOP PESTICIDE DOSE REQUIRES EXPERT ADVICE STOP CALL YOUR LOCAL KRISHI VIGYAN KENDRA STOP DO NOT SELF-MEDICATE CROPS STOP',
+    hi: 'KVK EXPERT SE SALAH LEN STOP KEETNAASHAK MAATRA KE LIYE VISHESHAGYA CHAHIYE STOP APNE STHANIYA KRISHI VIGYAN KENDRA CALL KAREN STOP KHUD SE ILAJ MAT KAREN STOP',
+    mr: 'KVK TAZAGYANIKANKADE JA STOP KEETNAASHAK MATRASATHI TAZAGYANIK LAGTO STOP TUMCHYA STHANIK KRISHI VIGYAN KENDRA LA CALL KARA STOP SWATAHOON UPCHAR KAR NAK STOP',
+  },
+};
 
 /**
  * Check text for safety-critical content.
  * @param {string} text
+ * @param {string} [lang='en']
+ * @param {object|null} [kvkMatch=null]  Matched KVK entry for personalized pesticide referral
  * @returns {{ blocked: boolean, telegram?: string, reason?: string }}
  */
-export function safetyFloor(text) {
-  if (SELF_HARM_RE.test(text)) {
+export function safetyFloor(text, lang = 'en', kvkMatch = null) {
+  const safetyLang = ['en', 'hi', 'mr'].includes(lang) ? lang : 'en';
+
+  if (SELF_HARM_RE.test(text) || INGEST_RE.test(text)) {
     console.log('SAFETY_FLOOR_TRIGGERED: self_harm');
-    return { blocked: true, telegram: EMERGENCY_TELEGRAM, reason: 'self_harm' };
+    return {
+      blocked: true,
+      telegram: SAFETY_TELEGRAMS.emergency[safetyLang],
+      reason: 'self_harm',
+    };
   }
   if (PESTICIDE_NAMES_RE.test(text) || DOSE_RE.test(text)) {
     console.log('SAFETY_FLOOR_TRIGGERED: pesticide_dose');
-    return { blocked: true, telegram: KVK_REDIRECT_TELEGRAM, reason: 'pesticide_dose' };
+    let telegram;
+    if (kvkMatch && kvkMatch.district) {
+      const distUp = kvkMatch.district.toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+      telegram = KVK_NAMED[safetyLang](distUp);
+    } else {
+      telegram = SAFETY_TELEGRAMS.kvk[safetyLang];
+    }
+    return { blocked: true, telegram, reason: 'pesticide_dose' };
   }
   return { blocked: false };
+}
+
+// ---------------------------------------------------------------------------
+// KVK lookup
+// ---------------------------------------------------------------------------
+
+/**
+ * Find KVK entries matching state and district.
+ *
+ * Match algorithm:
+ * 1. Filter by state (case-insensitive exact match).
+ * 2. Among those, find entries where entry.district (if set) contains the
+ *    supplied district as a substring, OR the kvk/host text contains it.
+ * 3. Return the first match, or null.
+ *
+ * @param {object} kvkData  Parsed kvk.json content
+ * @param {string} state
+ * @param {string} district
+ * @returns {{ state: string, district: string|null, kvk: string, host: string, source: string }|null}
+ */
+export function findKvk(kvkData, state, district) {
+  if (!kvkData || !Array.isArray(kvkData.kvks)) return null;
+  if (!state || !district) return null;
+
+  const stateNorm = state.trim().toLowerCase();
+  const distNorm = district.trim().toLowerCase();
+
+  if (!stateNorm || !distNorm) return null;
+
+  // Filter by state
+  const stateMatches = kvkData.kvks.filter(
+    k => k.state && k.state.toLowerCase() === stateNorm
+  );
+  if (stateMatches.length === 0) return null;
+
+  // Find best district match
+  const distMatch = stateMatches.find(k => {
+    if (k.district && k.district.toLowerCase().includes(distNorm)) return true;
+    // Also search in kvk address text as fallback
+    if (k.kvk && k.kvk.toLowerCase().includes(distNorm)) return true;
+    return false;
+  });
+
+  return distMatch || null;
 }
 
 // ---------------------------------------------------------------------------
@@ -102,25 +177,50 @@ const PRIMARY_MODEL = 'openai/gpt-oss-120b';
 const FALLBACK_MODEL = 'openai/gpt-oss-20b';
 
 const LANG_NAMES = { en: 'English', hi: 'Hindi', mr: 'Marathi' };
+const LANG_SCRIPT_NOTE = {
+  en: '',
+  hi: ' Write the telegram in Hindi but use ROMAN LETTERS ONLY (A-Z, digits, spaces) — no Devanagari script. This is required so it can be transmitted as Morse code.',
+  mr: ' Write the telegram in Marathi but use ROMAN LETTERS ONLY (A-Z, digits, spaces) — no Devanagari script. This is required so it can be transmitted as Morse code.',
+};
 
 function buildSystemPrompt(lang) {
   const langName = LANG_NAMES[lang] || 'English';
+  const langRule = lang === 'hi'
+    ? 'Write the telegram in HINDI using Roman letters (Hinglish spelling), NOT in English, e.g. "SAFED MAKKHI SE PATTA MOD VIRUS STOP PRABHAVIT PAUDHE UKHADEN STOP PEELA CHIPCHIPA TRAP LAGAYEN STOP". '
+    : lang === 'mr'
+    ? 'Write the telegram in MARATHI using Roman letters, NOT in English, e.g. "PANDHRYA MASHIMULE PAN GUNDALNE VIRUS STOP BADHIT ROPE UPTUN TAKA STOP PIVLE CHIKAT SAPLE LAVA STOP". '
+    : 'Write the telegram in plain English. ';
   return (
-    'You are a terse Indian agricultural telegram service from the 1960s. ' +
-    'The farmer has written in ' + langName + '. ' +
-    'Respond ONLY with a JSON object with exactly two keys: ' +
-    '"telegram" (string) and "words" (number). ' +
-    'The telegram value must be ALL UPPERCASE, ' +
-    'use the word STOP to separate sentences, ' +
-    'and contain at most 20 content words (STOPs do not count as words). ' +
-    'Give practical farming advice. ' +
-    'Do NOT mention any pesticide names, doses, or chemical compounds. ' +
-    'Do NOT include self-harm or emergency information — that is handled separately. ' +
-    'Example: {"telegram":"SPRAY NEEM OIL ON LEAVES STOP REPEAT AFTER SEVEN DAYS STOP","words":11}'
+    'You are a terse Indian agricultural telegram service from the 1960s, advising smallholder farmers. ' +
+    'The farmer chose ' + langName + '. ' + langRule +
+    'Use only letters A-Z, digits and spaces (no Devanagari, no punctuation). ' +
+    'Respond ONLY with a JSON object with exactly three keys: "telegram" (string), "words" (number) and "cause" (string, in English). ' +
+    'First decide the single most likely cause for the symptoms in Indian field conditions: think of the common pests, viral diseases spread by insects (for example leaf curl virus spread by whitefly when leaves curl in tomato, chilli or cotton), fungal and bacterial diseases, and only then nutrient deficiency or water stress. Name it specifically in "cause". ' +
+    'The telegram must be ALL UPPERCASE, use STOP to separate sentences, contain at most 20 content words (STOPs do not count), and begin with the cause. ' +
+    'Give practical, safe, low-cost actions (cultural, mechanical, biological, sticky traps, neem-based, removing infected plants, seeking KVK confirmation). ' +
+    'Do NOT mention any chemical pesticide or fungicide names, doses or compounds. ' +
+    'Do NOT include self-harm or emergency information; that is handled separately. ' +
+    (lang === 'hi'
+      ? 'Example: {"telegram":"SAFED MAKKHI SE PATTA MOD VIRUS STOP MUDE PAUDHE UKHAADEN STOP PEELE CHIPCHIPE TRAP LAGAYEN STOP NEEM TEL CHHIDKEN STOP","words":16,"cause":"LEAF CURL VIRUS (WHITEFLY)"}. Every word except STOP, KVK and numbers must be Hindi.'
+      : lang === 'mr'
+      ? 'Example: {"telegram":"PANDHRI MASHI PAN GUNDALNE VIRUS STOP GUNDALLELI ROPE UPTUN TAKA STOP PIVLE CHIKAT SAPLE LAVA STOP NEEM TEL FAVARA STOP","words":16,"cause":"LEAF CURL VIRUS (WHITEFLY)"}. Every word except STOP, KVK and numbers must be Marathi.'
+      : 'Example: {"telegram":"WHITEFLY LEAF CURL VIRUS STOP UPROOT CURLED PLANTS STOP SET YELLOW STICKY TRAPS STOP SPRAY NEEM OIL STOP","words":14,"cause":"LEAF CURL VIRUS (WHITEFLY)"}')
   );
 }
 
+const EN_WORDS = /\b(THE|AND|REMOVE|APPLY|SPRAY|PLANTS?|LEAVES|WATER|SOIL|USE|WITH|FOR|INFECTED|TRAPS?|CROPS?)\b/g;
+export function looksEnglish(t) { const w = t.split(/\s+/).filter(x => x && x !== 'STOP'); const hits = (t.match(EN_WORDS) || []).length; return w.length > 0 && hits / w.length > 0.25; }
+
 async function callGroq(apiKey, model, userText, lang, url = GROQ_API_URL) {
+  const r = await callGroqOnce(apiKey, model, userText, lang, url);
+  if (lang !== 'en' && looksEnglish(r.telegram)) {
+    const again = await callGroqOnce(apiKey, model, userText + '\n\n(Reply language: ' + (LANG_NAMES[lang] || lang) + ' in Roman letters, not English.)', lang, url);
+    if (!looksEnglish(again.telegram)) return again;
+  }
+  return r;
+}
+
+async function callGroqOnce(apiKey, model, userText, lang, url = GROQ_API_URL) {
   const isGroq = url === GROQ_API_URL;
   const body = JSON.stringify({
     model,
@@ -152,14 +252,40 @@ async function callGroq(apiKey, model, userText, lang, url = GROQ_API_URL) {
   if (!content) throw new Error('Empty model response');
 
   const parsed = JSON.parse(content.replace(/^```(json)?|```$/g, '').trim());
-  if (typeof parsed.telegram === 'string') {
-    // Count words in code; never trust the model's own count.
-    parsed.words = parsed.telegram.toUpperCase().split(/\s+/).filter(w => w !== 'STOP' && w.length > 0).length;
+
+  // Validate required fields
+  if (typeof parsed.telegram !== 'string') {
+    throw new Error('Invalid model JSON shape: missing telegram');
   }
-  if (typeof parsed.telegram !== 'string' || typeof parsed.words !== 'number') {
-    throw new Error('Invalid model JSON shape');
+  if (typeof parsed.cause !== 'string' || parsed.cause.trim() === '') {
+    throw new Error('Model response missing cause field');
   }
+
+  // Count words in code; never trust the model's own count.
+  parsed.words = parsed.telegram.toUpperCase().split(/\s+/).filter(w => w !== 'STOP' && w.length > 0).length;
+
   return parsed;
+}
+
+// ---------------------------------------------------------------------------
+// KVK data loader (cached in module scope)
+// ---------------------------------------------------------------------------
+let _kvkData = null;
+
+async function loadKvkData(env) {
+  if (_kvkData) return _kvkData;
+  try {
+    if (env?.ASSETS) {
+      const kvkUrl = new URL('/data/kvk.json', 'https://placeholder.internal');
+      const res = await env.ASSETS.fetch(new Request(kvkUrl.toString()));
+      if (res.ok) {
+        _kvkData = await res.json();
+      }
+    }
+  } catch (err) {
+    console.warn('Could not load kvk.json via ASSETS:', err.message);
+  }
+  return _kvkData;
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +299,7 @@ async function handleTelegram(request, env) {
     return jsonResponse({ error: 'Invalid JSON body' }, 400);
   }
 
-  const { text, lang = 'en' } = body;
+  const { text, lang = 'en', state = '', district = '' } = body;
 
   if (!text || typeof text !== 'string' || text.trim().length === 0) {
     return jsonResponse({ error: 'text is required' }, 400);
@@ -185,13 +311,25 @@ async function handleTelegram(request, env) {
     return jsonResponse({ error: 'lang must be en, hi, or mr' }, 400);
   }
 
+  // Load KVK data and find match
+  const kvkData = await loadKvkData(env);
+  const kvkMatch = (kvkData && state && district)
+    ? findKvk(kvkData, state, district)
+    : null;
+
   // Safety floor — checked BEFORE model call
-  const safety = safetyFloor(text);
+  const safety = safetyFloor(text, lang, kvkMatch);
   if (safety.blocked) {
     const telegram = safety.telegram;
     const words = telegram.split(/\s+/).filter(w => w !== 'STOP' && w.length > 0).length;
     const morse = morseEncode(telegram);
-    return jsonResponse({ telegram, words, cost_paise: costPaise(words), morse });
+    return jsonResponse({
+      telegram,
+      words,
+      cost_paise: costPaise(words),
+      morse,
+      kvk: kvkMatch ? { district: kvkMatch.district, kvk: kvkMatch.kvk, host: kvkMatch.host, source: kvkMatch.source } : null,
+    });
   }
 
   // Groq API
@@ -200,38 +338,29 @@ async function handleTelegram(request, env) {
     return jsonResponse({ error: 'GROQ_API_KEY not configured' }, 503);
   }
 
-  let modelResult;
-  try {
-    modelResult = await callGroq(apiKey, PRIMARY_MODEL, text.trim(), lang);
-  } catch (primaryErr) {
-    console.warn('Primary model failed:', primaryErr.message, '— trying fallback');
-    try {
-      modelResult = await callGroq(apiKey, FALLBACK_MODEL, text.trim(), lang);
-    } catch (fallbackErr) {
-      try {
-        if (!env?.GEMINI_API_KEY) throw fallbackErr;
-        modelResult = await callGroq(env.GEMINI_API_KEY, 'gemini-3.5-flash-lite', text.trim(), lang, GEMINI_API_URL);
-      } catch (geminiErr) {
-      console.error('Fallback model also failed:', fallbackErr.message);
-      const errorTelegram = 'SERVICE UNAVAILABLE STOP TRY AGAIN LATER STOP';
-      return jsonResponse(
-        {
-          telegram: errorTelegram,
-          words: 5,
-          cost_paise: costPaise(5),
-          morse: morseEncode(errorTelegram),
-          error: 'Model unavailable',
-        },
-        502
-      );
-      }
-    }
+  // v2: model chain per language. Outside review + our own A/B (1 Nov 2026): gpt-oss failed JSON
+  // validation on Romanized Marathi, gemini-3.5-flash wrote the clearest Marathi telegrams.
+  const gem = env?.GEMINI_API_KEY;
+  const chain = lang === 'mr'
+    ? [[gem, 'gemini-3.5-flash', GEMINI_API_URL], [apiKey, PRIMARY_MODEL, GROQ_API_URL], [gem, 'gemini-3.5-flash-lite', GEMINI_API_URL]]
+    : [[apiKey, PRIMARY_MODEL, GROQ_API_URL], [apiKey, FALLBACK_MODEL, GROQ_API_URL], [gem, 'gemini-3.5-flash-lite', GEMINI_API_URL]];
+  let modelResult, modelUsed, lastErr;
+  for (const [key, model, url] of chain) {
+    if (!key) continue;
+    try { modelResult = await callGroq(key, model, text.trim(), lang, url); modelUsed = model; break; }
+    catch (e) { lastErr = e; console.warn('Model failed:', model, e.message); }
+  }
+  if (!modelResult) {
+    console.error('All models failed:', lastErr && lastErr.message);
+    const errorTelegram = 'SERVICE UNAVAILABLE STOP TRY AGAIN LATER STOP';
+    return jsonResponse({ telegram: errorTelegram, words: 5, cost_paise: costPaise(5), morse: morseEncode(errorTelegram), kvk: null, error: 'Model unavailable' }, 502);
   }
 
-  const { telegram, words } = modelResult;
+  const { telegram, words, cause } = modelResult;
+  const model = modelUsed;
 
   // Safety floor — checked AFTER model response too
-  const postSafety = safetyFloor(telegram);
+  const postSafety = safetyFloor(telegram, lang, kvkMatch);
   if (postSafety.blocked) {
     const safeTelegram = postSafety.telegram;
     const safeWords = safeTelegram.split(/\s+/).filter(w => w !== 'STOP' && w.length > 0).length;
@@ -240,13 +369,22 @@ async function handleTelegram(request, env) {
       words: safeWords,
       cost_paise: costPaise(safeWords),
       morse: morseEncode(safeTelegram),
+      kvk: kvkMatch ? { district: kvkMatch.district, kvk: kvkMatch.kvk, host: kvkMatch.host, source: kvkMatch.source } : null,
     });
   }
 
   const cost_paise = costPaise(words);
   const morse = morseEncode(telegram);
 
-  return jsonResponse({ telegram, words, cost_paise, morse });
+  return jsonResponse({
+    telegram,
+    words,
+    cost_paise,
+    morse,
+    cause: cause || null,
+    model,
+    kvk: kvkMatch ? { district: kvkMatch.district, kvk: kvkMatch.kvk, host: kvkMatch.host, source: kvkMatch.source } : null,
+  });
 }
 
 function jsonResponse(data, status = 200) {

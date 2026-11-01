@@ -74,6 +74,28 @@
             </select>
           </div>
 
+          <!-- State and District for KVK lookup -->
+          <div class="kt-field kt-field--inline">
+            <label class="kt-label" for="state">State / राज्य</label>
+            <select id="state" name="state" class="kt-select" aria-label="Select state">
+              <option value="">— Select state (optional) —</option>
+            </select>
+          </div>
+
+          <div class="kt-field kt-field--inline">
+            <label class="kt-label" for="district">District / जिला</label>
+            <input
+              type="text"
+              id="district"
+              name="district"
+              class="kt-input"
+              placeholder="E.g. Pune, Nashik, Nagpur…"
+              maxlength="80"
+              autocomplete="off"
+              aria-label="Enter district name"
+            />
+          </div>
+
           <button
             type="submit"
             id="send-btn"
@@ -128,6 +150,9 @@
 
           <div class="kt-telegram-divider" aria-hidden="true">&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;</div>
 
+          <!-- Cause line (shown when present) -->
+          <p id="telegram-cause" class="kt-telegram-cause" hidden></p>
+
           <p id="telegram-body" class="kt-telegram-body"></p>
 
           <div class="kt-telegram-divider" aria-hidden="true">&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;</div>
@@ -136,6 +161,12 @@
             <span id="telegram-words"></span> words &mdash;
             Cost: <strong id="telegram-cost"></strong>
           </p>
+
+          <!-- Morse strip (visual dots/dashes synced with audio) -->
+          <div id="morse-strip-container" class="kt-morse-strip-container" hidden aria-hidden="true">
+            <div id="morse-strip" class="kt-morse-strip"></div>
+            <p id="morse-wpm" class="kt-morse-wpm"></p>
+          </div>
 
           <div class="kt-telegram-actions">
             <button
@@ -164,6 +195,14 @@
           </div>
 
         </article>
+
+        <!-- KVK card — shown when a KVK match is found -->
+        <aside id="kvk-card" class="kt-kvk-card" hidden aria-label="Local KVK information">
+          <h3 class="kt-kvk-title">&#128205; YOUR LOCAL KRISHI VIGYAN KENDRA</h3>
+          <p id="kvk-name" class="kt-kvk-name"></p>
+          <p id="kvk-host" class="kt-kvk-host"></p>
+          <a id="kvk-source" class="kt-kvk-source" href="#" target="_blank" rel="noopener noreferrer">ICAR source &#8599;</a>
+        </aside>
 
       </section>
 
