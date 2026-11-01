@@ -190,6 +190,7 @@ export const POLICY = {
   telegraph: 'krishi-telegraph', // Gemma-3-27B -> Gemma-3-12B -> Llama-3.3-70B (Roman Hindi / Marathi writer)
   judge: 'krishi-judge',         // Qwen3Guard-Gen-8B -> Llama-Guard-4-12B (safety judge on the advice)
   calc: 'krishi-calc',           // Qwen3.5-35B-A3B + otari_code_execution
+  private: 'krishi-private',     // Huihui-Qwythos-9B (self-hosted, llama.cpp) -> Qwen3-235B -> Gemma-3-27B
   research: 'krishi-research',  // Qwen3-235B-A22B-Instruct -> Qwen3.5-35B (web search + MCP tool use)
   locate: 'krishi-research',         // same tool-capable model, calls our KVK MCP server through Otari
 };
@@ -212,8 +213,8 @@ export async function farmerUser(farmerId) {
  * trace is what Otari told us in its response headers: which real model
  * served the policy, whether a fallback ran, attempts, latency and cost.
  */
-export async function otari(env, body, { role, user, timeoutMs = 27000, extraHeaders = {}, tags = {} } = {}) {
-  const key = secret(env, 'OTARI_KEY');
+export async function otari(env, body, { role, user, timeoutMs = 27000, extraHeaders = {}, tags = {}, keyName = 'OTARI_KEY' } = {}) {
+  const key = secret(env, keyName);
   const t0 = Date.now();
   const trace = { role, requested: body.model };
   if (!key) return { ok: false, status: 503, error: 'OTARI_KEY not configured', trace };
@@ -243,6 +244,7 @@ export async function otari(env, body, { role, user, timeoutMs = 27000, extraHea
     guardrails: h('Otari-Guardrails') || null,
     end_user_budget: h('Otari-End-User-Budget') ? true : undefined,
     error_code: h('Otari-Error-Code') || undefined,
+    budget_scope: h('Otari-Budget-Scope') || undefined,
   });
   let data = null; let text = '';
   try { text = await res.text(); data = JSON.parse(text); } catch { data = null; }
@@ -272,7 +274,7 @@ export async function otariStream(env, body, { role, user, timeoutMs = 90000 } =
       body: JSON.stringify({ ...body, stream: true, stream_options: { include_usage: true }, ...(user ? { user } : {}), metadata: { app: 'krishi-telegram', role } }),
     });
     const h = n => res.headers.get(n);
-    Object.assign(trace, { status: res.status, served: h('Otari-Provider') ? `${h('Otari-Provider')}:${h('Otari-Model')}` : null, request_id: h('Otari-Request-ID'), fallback: h('Otari-Fallback') === 'true' });
+    Object.assign(trace, { status: res.status, served: h('Otari-Provider') ? `${h('Otari-Provider')}:${h('Otari-Model')}` : null, request_id: h('Otari-Request-ID'), fallback: h('Otari-Fallback') === 'true', attempts: Number(h('Otari-Attempt-Count') || 0) || null, guardrails: h('Otari-Guardrails') || null });
     if (!res.ok || !res.body) { trace.error = `HTTP ${res.status}`; trace.ms = Date.now() - t0; return { ok: false, status: res.status, error: trace.error, trace }; }
     const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = ''; let content = '';
     for (;;) {
@@ -361,10 +363,11 @@ async function runDiagnose(env, text, { privateRoute, user }) {
     max_tokens: 700, temperature: 0.3,
   };
   if (privateRoute) {
-    const r = await otariStream(env, { ...body, model: PRIVATE_MODEL, messages: [{ role: 'system', content: privatePrompt() }, { role: 'user', content: text }], max_tokens: 160, reasoning_effort: 'none' }, { role: 'diagnose-private', user, timeoutMs: 55000 });
+    // Policy krishi-private: Tab's self-hosted model first; Otari itself falls over to Qwen3-235B, then Gemma.
+    const r = await otariStream(env, { ...body, model: POLICY.private, messages: [{ role: 'system', content: privatePrompt() }, { role: 'user', content: text }], max_tokens: 160, reasoning_effort: 'none' }, { role: 'diagnose-private', user, timeoutMs: 55000 });
     const j = r.ok ? parseJsonLoose(r.content) : null;
     if (j && j.cause && j.telegram_en) return { j, traces: [r.trace] };
-    r.trace.note = 'private route failed; Otari policy takes over';
+    r.trace.note = 'private route gave no usable answer; the normal diagnose policy takes over';
     const r2 = await otari(env, { ...body, model: POLICY.diagnose, response_format: { type: 'json_object' } }, { role: 'diagnose', user });
     return { j: r2.ok ? parseJsonLoose(r2.content) : null, traces: [r.trace, r2.trace], err: r2 };
   }
@@ -646,6 +649,58 @@ async function handleGuard(request, env) {
   return jsonResponse({ profile: b.profile || 'krishi-safety-floor', result: { valid: !s.blocked, explanation: s.blocked ? s.reason : null, score: s.blocked ? 1 : 0 } });
 }
 
+
+// ---------------------------------------------------------------------------
+// /api/proof: run one Otari feature live and return the raw Otari-* evidence.
+// ---------------------------------------------------------------------------
+const DIARY_LINE = 'Day note: rows 1 to 40 look even, no new spots, soil moist after irrigation, a few aphids on the border rows. ';
+export const PROOF_FEATURES = ['routing', 'guardrail', 'user_budget', 'mcp', 'web_search', 'code_execution'];
+async function handleProof(request, env) {
+  const url = new URL(request.url); const f = url.searchParams.get('f') || '';
+  if (!PROOF_FEATURES.includes(f)) return jsonResponse({ error: 'f must be one of ' + PROOF_FEATURES.join(', ') }, 400);
+  const rand = (await sha16(String(Date.now()) + Math.random())).slice(0, 10);
+  const user = 'proof-' + rand;
+  const steps = [];
+  const step = (label, r, extra = {}) => { steps.push({ label, status: r.status, ...r.trace, ...extra }); return r; };
+  if (f === 'routing') {
+    // A long field diary is beyond the self-hosted model's context window: Otari falls over to the next target.
+    const diary = DIARY_LINE.repeat(500);
+    const r = await otari(env, { model: POLICY.private, messages: [{ role: 'system', content: 'Summarise this farm diary for the farmer in one plain English sentence.' }, { role: 'user', content: diary }], max_tokens: 60, reasoning_effort: 'none' }, { role: 'proof-routing', user, timeoutMs: 28000 });
+    step('policy krishi-private with a 10,000-word diary', r, { answer: (r.content || '').slice(0, 200) });
+    return jsonResponse({ feature: f, expect: 'Otari-Fallback: true and Otari-Attempt-Count: 2 (the self-hosted model refuses a prompt longer than its context; Otari moves on inside the same request)', steps });
+  }
+  if (f === 'guardrail') {
+    const r = await otari(env, { model: POLICY.telegraph, messages: [{ role: 'user', content: 'My brother drank pesticide in the field, what do we do' }], max_tokens: 20 }, { role: 'proof-guardrail', user });
+    step('poisoning message sent straight to Otari (app code floor skipped)', r, { body: r.data || null });
+    const ok = await otari(env, { model: POLICY.telegraph, messages: [{ role: 'user', content: 'Reply with one word: OK' }], max_tokens: 5 }, { role: 'proof-guardrail', user });
+    step('ordinary message', ok, { answer: ok.content || '' });
+    return jsonResponse({ feature: f, expect: 'first call 403 guardrail_violation from Otari (our krishi-safety-floor service, block mode); second call 200 with valid:true', steps });
+  }
+  if (f === 'user_budget') {
+    for (let i = 1; i <= 2; i++) {
+      const r = await otari(env, { model: 'nebius:google/gemma-3-27b-it', messages: [{ role: 'user', content: 'Reply with one word: OK' }], max_tokens: 3 }, { role: 'proof-user-budget', user, keyName: 'DEMO_KEY' });
+      step(`call ${i} from the same new farmer id`, r, { body: r.ok ? undefined : (r.data || null) });
+    }
+    return jsonResponse({ feature: f, expect: 'demo key with an end-user budget of 1 request per farmer per day: call 1 is 200, call 2 is 403 budget_exceeded with Otari-Budget-Scope: user. (The live app key allows 40 requests and US$0.05 per farmer per day.)', steps });
+  }
+  if (f === 'mcp') {
+    const loc = await runLocate(env, 'I farm sugarcane near Baramati, Pune district, Maharashtra.', user);
+    steps.push({ label: 'model asked to find the KVK; it calls find_kvk on our MCP server through Otari', ...(loc.trace || {}), answer: loc.kvk });
+    return jsonResponse({ feature: f, expect: 'the KVK at Baramati (Sharda Nagar, Malegaon Colony) comes back from our MCP tool', steps });
+  }
+  if (f === 'web_search') {
+    const res = await handleSource(new Request('https://x/api/source', { method: 'POST', body: JSON.stringify({ cause: 'RICE BLAST', farmer: user }) }), env);
+    const j = await res.json();
+    return jsonResponse({ feature: f, expect: 'links that came back from Otari web search (Indian extension sites first)', steps: (j.trace || []).map(t => ({ label: 'otari_web_search, one search', ...t, answer: j.summary, sources: j.sources })) });
+  }
+  if (f === 'code_execution') {
+    const res = await handleCalc(new Request('https://x/api/calc', { method: 'POST', body: JSON.stringify({ question: 'Field is 2 acre 25 guntha. Onion rows 15 cm apart, plants 10 cm apart, 70% of land usable. How many seedlings?', lang: 'en', farmer: user }) }), env);
+    const j = await res.json();
+    return jsonResponse({ feature: f, expect: 'about 495,740 seedlings, computed by code that ran in Otari code execution', steps: (j.trace || []).map(t => ({ label: 'otari_code_execution', ...t, answer: j.answer_en, python: j.python })) });
+  }
+  return jsonResponse({ error: 'unreachable' }, 500);
+}
+
 async function handlePrivateStatus() {
   const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 4000);
   try { const r = await fetch(PRIVATE_HEALTH, { signal: ctrl.signal, redirect: 'manual' }); clearTimeout(t); const ok = r.status === 200 && /ok/i.test(await r.text()); return jsonResponse({ awake: ok }); }
@@ -675,6 +730,7 @@ export default {
     if (request.method === 'POST' && url.pathname === '/api/source') return handleSource(request, env);
     if (request.method === 'POST' && url.pathname === '/api/calc') return handleCalc(request, env);
     if (url.pathname === '/api/private-status') return handlePrivateStatus();
+    if (url.pathname === '/api/proof') return handleProof(request, env);
     if (url.pathname === '/mcp') return handleMcp(request, env);
     if (url.pathname === '/guard/validate' || url.pathname === '/guard/profiles') return handleGuard(request, env);
     if (env?.ASSETS) return env.ASSETS.fetch(request);

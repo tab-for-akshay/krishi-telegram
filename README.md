@@ -1,5 +1,7 @@
 # Krishi Telegram
 
+> **Otari edition (branch `otari`)**: every model call goes through Mozilla's Otari gateway. Live at https://krishi-telegram-otari.vercel.app (mirror: krishi-telegram-otari.sites.tab.bot). See [OTARI.md](OTARI.md).
+
 **Kiroween 2026 Hackathon — Category: RESURRECTION**
 
 > *"What hath God wrought"* — first US telegram, 1844.

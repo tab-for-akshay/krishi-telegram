@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Krishi Telegram: check every Otari feature live</title>
+<link rel="stylesheet" href="styles.css" />
+<style>
+.pf{max-width:860px;margin:0 auto;padding:1rem}
+.pf-row{background:rgba(255,250,235,.95);color:#2b2118;border:1px solid #c9b48c;border-radius:8px;padding:.8rem 1rem;margin:.8rem 0}
+.pf-row h3{margin:.1rem 0 .3rem;font-size:1.05rem;letter-spacing:.03em}
+.pf-row p{margin:.2rem 0;font-size:.9rem}
+.pf-out{font-size:.78rem;margin-top:.5rem;overflow-x:auto}
+.pf-out table{border-collapse:collapse;width:100%}.pf-out td,.pf-out th{border-bottom:1px solid #d8c7a8;padding:.25rem;text-align:left;vertical-align:top}
+.pf-out code{word-break:break-all}
+.ok{color:#1b5e20;font-weight:700}.no{color:#8e1b1b;font-weight:700}
+</style>
+</head>
+<body>
+<div class="kt-page"><main class="pf">
+<p><a href="/">&larr; Back to Krishi Telegram</a></p>
+<h1 class="kt-title" style="font-size:1.6rem">CHECK EVERY OTARI FEATURE, LIVE</h1>
+<p>Each button below makes real requests through Mozilla&rsquo;s Otari gateway from this app&rsquo;s server and shows what Otari answered: status, the policy asked, the model that answered and Otari&rsquo;s own headers. Nothing here is a recording.</p>
+
+<div class="pf-row"><h3>1&ndash;2. Open-weight models, several in distinct roles</h3>
+<p>Every telegram uses three open-weight models through Otari: Qwen3-235B-A22B diagnoses, Gemma 3 27B writes the Hindi/Marathi telegram, Qwen3Guard-Gen-8B judges safety. Search and the KVK tool use Qwen3-235B; field maths uses Qwen3.5-35B-A3B; the private route uses Tab&rsquo;s self-hosted Huihui-Qwythos-9B. Send any telegram on the <a href="/">main page</a> and open the <em>Gateway receipt</em> under it.</p></div>
+
+<div class="pf-row" data-f="routing"><h3>3. Routing and fallback</h3>
+<p>Policy <code>krishi-private</code>: Tab&rsquo;s self-hosted 9B model first, then Qwen3-235B, then Gemma 3 27B. A 10,000-word field diary is longer than the small model&rsquo;s context, so it refuses and Otari moves on in the same request.</p>
+<button class="kt-btn kt-btn--print">RUN IT</button><div class="pf-out"></div></div>
+
+<div class="pf-row" data-f="guardrail"><h3>4. Guardrails</h3>
+<p>Our safety floor (poisoning, self-harm and pesticide-dose rules in English, Hindi and Marathi) runs as a service and is registered in Otari as an organisation guardrail in block mode. A poisoning message sent straight to Otari is refused before any model sees it.</p>
+<button class="kt-btn kt-btn--print">RUN IT</button><div class="pf-out"></div></div>
+
+<div class="pf-row" data-f="user_budget"><h3>5. Per-user budgets</h3>
+<p>Each farmer has a daily allowance enforced by Otari (end-user budget on the app&rsquo;s service key: 40 requests and US$0.05 a day). To show the refusal without waiting a day, this uses a demo key whose allowance is 1 request per farmer per day, with a brand-new farmer id each time.</p>
+<button class="kt-btn kt-btn--print">RUN IT</button><div class="pf-out"></div></div>
+
+<div class="pf-row"><h3>6. Budgets and spending limits</h3>
+<p>The app&rsquo;s service key has a US$1 monthly spend ceiling. The diagnose policy has a rule <code>budget_used_pct &ge; 80 &rarr; Gemma 3 27B</code>, so the app gets cheaper instead of stopping. Pushing a real key past 80% in a live button would spend the ceiling, so this one is a recorded run with Otari request ids: <a href="https://github.com/tab-for-akshay/krishi-telegram/blob/otari/evidence/README.md" target="_blank" rel="noopener">evidence</a> (Qwen3-235B at 0% &rarr; Gemma 3 27B at 83%).</p></div>
+
+<div class="pf-row" data-f="mcp"><h3>7. MCP</h3>
+<p>Our own MCP server (<code>/mcp</code>, tool <code>find_kvk</code> over ICAR&rsquo;s 708 Krishi Vigyan Kendras) is registered in the Otari workspace. The model calls it through Otari to find a farmer&rsquo;s KVK from the town they name.</p>
+<button class="kt-btn kt-btn--print">RUN IT</button><div class="pf-out"></div></div>
+
+<div class="pf-row" data-f="web_search"><h3>8. Web search</h3>
+<p>One Otari web search for an Indian extension page. Only links that came back from the search are shown.</p>
+<button class="kt-btn kt-btn--print">RUN IT</button><div class="pf-out"></div></div>
+
+<div class="pf-row" data-f="code_execution"><h3>9. Code execution</h3>
+<p>Field maths: the model must compute with Otari code execution. Right answer: about 495,740 seedlings.</p>
+<button class="kt-btn kt-btn--print">RUN IT</button><div class="pf-out"></div></div>
+
+<p class="kt-footer-attribution">Built by Tab, an AI assistant, for team lead Akshay Wagh. Source: <a href="https://github.com/tab-for-akshay/krishi-telegram/tree/otari">otari branch</a>.</p>
+</main></div>
+<script>
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+document.querySelectorAll('.pf-row[data-f]').forEach(row=>{
+  const b=row.querySelector('button'), out=row.querySelector('.pf-out');
+  b.addEventListener('click',async()=>{
+    b.disabled=true; b.textContent='RUNNING…'; out.innerHTML='';
+    const t0=Date.now();
+    try{
+      const r=await fetch('/api/proof?f='+row.dataset.f); const j=await r.json();
+      const rows=(j.steps||[]).map(s=>`<tr><td>${esc(s.label)}</td><td class="${s.status===200?'ok':'no'}">${esc(s.status)}</td><td><code>${esc(s.requested||'')}</code></td><td><code>${esc(s.served||'—')}</code></td><td>${s.fallback?'<b>fallback: true</b><br>':''}${s.attempts?'attempts: '+s.attempts+'<br>':''}${s.error_code?'error code: <b>'+esc(s.error_code)+'</b><br>':''}${s.budget_scope?'budget scope: '+esc(s.budget_scope)+'<br>':''}${s.guardrails?'guardrails: <code>'+esc(s.guardrails)+'</code><br>':''}${s.request_id?'<small>request '+esc(s.request_id)+'</small>':''}</td></tr>`+
+        ((s.answer||s.body||s.python||s.sources)?`<tr><td colspan="5"><small>${s.answer?'Answer: '+esc(typeof s.answer==='string'?s.answer:JSON.stringify(s.answer))+'<br>':''}${s.body?'Otari said: <code>'+esc(JSON.stringify(s.body))+'</code><br>':''}${s.sources?'Sources: '+s.sources.map(x=>'<a href="'+esc(x.url)+'" target="_blank" rel="noopener">'+esc(x.title||x.url)+'</a>').join(', ')+'<br>':''}${s.python?'<pre class="kt-code">'+esc(s.python)+'</pre>':''}</small></td></tr>`:'')).join('');
+      out.innerHTML=`<p><b>Expect:</b> ${esc(j.expect||j.error)}</p><table><tr><th>Call</th><th>HTTP</th><th>Asked for</th><th>Answered by</th><th>Otari headers</th></tr>${rows}</table><p><small>${((Date.now()-t0)/1000).toFixed(1)} s</small></p>`;
+    }catch(e){out.textContent='Network error: '+e.message;}
+    b.disabled=false; b.textContent='RUN IT AGAIN';
+  });
+});
+</script>
+</body></html>
