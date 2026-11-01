@@ -35,6 +35,7 @@
       <p class="kt-header-sub">— कृषि तार सेवा —</p>
       <h1 class="kt-title">KRISHI TELEGRAM</h1>
       <p class="kt-header-tagline">Farm Advisory by Electric Telegraph &middot; Est. 2026</p>
+      <p class="kt-header-otari">Open-weight models only &middot; routed through Mozilla&rsquo;s Otari gateway</p>
     </header>
 
     <main class="kt-main" id="main-content">
@@ -94,6 +95,14 @@
               autocomplete="off"
               aria-label="Enter district name"
             />
+          </div>
+
+          <div class="kt-field kt-route">
+            <label class="kt-check">
+              <input type="checkbox" id="route-private" />
+              Private route: Tab&rsquo;s self-hosted open model (slow, through Otari)
+              <span id="private-status" class="kt-dot" title="checking">&#9679;</span>
+            </label>
           </div>
 
           <button
@@ -185,6 +194,9 @@
             >
               &#9646;&#9646; STOP
             </button>
+            <button id="source-btn" class="kt-btn kt-btn--print" aria-label="Find an extension source for this advice">
+              &#128218; FIND A SOURCE
+            </button>
             <button
               id="print-btn"
               class="kt-btn kt-btn--print"
@@ -204,6 +216,39 @@
           <a id="kvk-source" class="kt-kvk-source" href="#" target="_blank" rel="noopener noreferrer">ICAR source &#8599;</a>
         </aside>
 
+        <aside id="source-card" class="kt-kvk-card" hidden aria-label="Extension sources">
+          <h3 class="kt-kvk-title">&#128218; WHAT THE EXTENSION SOURCES SAY</h3>
+          <p id="source-summary" class="kt-kvk-host"></p>
+          <ul id="source-list" class="kt-source-list"></ul>
+          <p class="kt-trace-note">Found with Otari web search (one search, Indian extension sites first). Links come only from the search results, never from the model.</p>
+        </aside>
+
+        <details id="trace-card" class="kt-trace" hidden>
+          <summary>GATEWAY RECEIPT &mdash; how this telegram travelled through Otari <span id="trace-total"></span></summary>
+          <table class="kt-trace-table"><thead><tr><th>Step</th><th>Otari policy / model asked</th><th>Model that answered</th><th>ms</th><th>US$</th></tr></thead><tbody id="trace-body"></tbody></table>
+          <p class="kt-trace-note" id="trace-note"></p>
+        </details>
+
+      </section>
+
+      <section class="kt-form-card" aria-label="Field maths telegram">
+        <h2 class="kt-form-title">FIELD MATHS TELEGRAM</h2>
+        <p class="kt-form-hint">Area, plant count, drip time. The sums are done by real code (Otari code execution), not guessed by the model.</p>
+        <form id="calc-form" novalidate>
+          <div class="kt-field">
+            <label for="calc-q" class="kt-label">YOUR QUESTION</label>
+            <textarea id="calc-q" class="kt-textarea" rows="3" maxlength="600" placeholder="e.g. I have 3 acre 10 guntha. Rows 1.5 m apart, plants 0.6 m apart. How many tomato plants?"></textarea>
+          </div>
+          <button type="submit" id="calc-btn" class="kt-btn kt-btn--primary">&#129518; CALCULATE BY TELEGRAM</button>
+        </form>
+        <div id="calc-loading" class="kt-loading" hidden><span class="kt-dots">&#9679;&#9679;&#9679;</span><p>Running the numbers&hellip;</p></div>
+        <div id="calc-error" class="kt-error" hidden role="alert"></div>
+        <article id="calc-card" class="kt-telegram" hidden aria-label="Field maths telegram">
+          <p id="calc-telegram" class="kt-telegram-body"></p>
+          <p id="calc-answer" class="kt-telegram-cause"></p>
+          <details class="kt-trace"><summary>The code that did the sums</summary><pre id="calc-python" class="kt-code"></pre></details>
+          <p class="kt-trace-note" id="calc-receipt"></p>
+        </article>
       </section>
 
     </main>
@@ -215,10 +260,11 @@
         Tele-MANAS: <strong>14416</strong>.
       </p>
       <p class="kt-footer-attribution">
-        Built by Tab, an AI assistant, using Kiro, for team lead Akshay Wagh.
+        Built by Tab, an AI assistant, for team lead Akshay Wagh.
+        The first version was built using Kiro; in this Otari edition every model call goes through <a href="https://otari.ai" target="_blank" rel="noopener">Otari</a> (open-weight models only: Qwen3-235B-A22B-Instruct, Qwen3.5-35B-A3B, Gemma 3 27B, Qwen3Guard, Llama Guard 4, Llama 3.3 70B, and Tab&rsquo;s self-hosted Huihui-Qwythos-9B).
       </p>
       <p class="kt-footer-legal">
-        &copy; 2026 Krishi Telegram &middot; MIT Licence &middot; Kiroween Hackathon
+        &copy; 2026 Krishi Telegram &middot; MIT Licence &middot; <a href="https://github.com/tab-for-akshay/krishi-telegram/tree/otari" target="_blank" rel="noopener">Source (otari branch)</a>
       </p>
     </footer>
 

@@ -461,6 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
       activeMorseStop = null;
     }
 
+    const tc = document.getElementById('trace-card'); if (tc) tc.hidden = true;
     // Show loading
     resultSection.hidden = false;
     loadingEl.hidden = false;
@@ -471,7 +472,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const response = await fetch('/api/telegram', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, lang, state, district }),
+        body: JSON.stringify({ text, lang, state, district, farmer: farmerId(), route: (document.getElementById('route-private') || {}).checked ? 'private' : 'otari' }),
       });
 
       const data = await response.json();
@@ -484,6 +485,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       renderTelegram(data);
+      lastResult = data;
+      renderTrace(data);
+      const sc = document.getElementById('source-card'); if (sc) sc.hidden = true;
+      const sb = document.getElementById('source-btn'); if (sb) { sb.hidden = !data.cause; sb.disabled = false; }
 
       // Render KVK card
       renderKvkCard(data.kvk);
@@ -503,5 +508,85 @@ document.addEventListener('DOMContentLoaded', () => {
       sendBtn.disabled = false;
       sendBtn.removeAttribute('aria-busy');
     }
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Otari edition: farmer id (per-farmer daily budget), gateway receipt,
+// sources (Otari web search), field maths (Otari code execution), private route.
+// ---------------------------------------------------------------------------
+let lastResult = null;
+function farmerId() {
+  try {
+    let id = localStorage.getItem('kt-farmer');
+    if (!id) { id = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)); localStorage.setItem('kt-farmer', id); }
+    return id;
+  } catch { return ''; }
+}
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+const ROLE_LABEL = { diagnose: 'Diagnose (English)', 'diagnose-private': 'Diagnose on private model', telegraph: 'Write Hindi/Marathi telegram', 'telegraph-retry': 'Rewrite (was English)', judge: 'Safety judge', 'locate-mcp': 'Find KVK via MCP tool', 'source-websearch': 'Web search for a source', 'calc-code-exec': 'Code execution' };
+function traceRows(trace) {
+  return (trace || []).map(t => `<tr><td>${esc(ROLE_LABEL[t.role] || t.role)}</td><td><code>${esc(t.requested)}</code></td><td>${t.served ? `<code>${esc(t.served)}</code>` : '<em>' + esc(t.error || '—') + '</em>'}${t.fallback ? ' <span class="kt-badge">fallback</span>' : ''}${t.verdict ? ' <span class="kt-badge">' + esc(t.verdict) + '</span>' : ''}${t.mcp ? ' <span class="kt-badge">MCP</span>' : ''}${t.note ? '<br><small>' + esc(t.note) + '</small>' : ''}</td><td>${t.ms ?? ''}</td><td>${t.cost_usd != null ? Number(t.cost_usd).toFixed(6) : ''}</td></tr>`).join('');
+}
+function renderTrace(data) {
+  const card = document.getElementById('trace-card'); if (!card) return;
+  const body = document.getElementById('trace-body');
+  body.innerHTML = traceRows(data.trace);
+  document.getElementById('trace-total').textContent = data.otari_cost_usd != null ? `(US$ ${Number(data.otari_cost_usd).toFixed(6)})` : '';
+  const notes = [];
+  if (data.stopped_by) notes.push(`Stopped by: ${data.stopped_by}. No advice model was trusted with this message.`);
+  if (data.kvk && data.kvk.via === 'mcp') notes.push('Your KVK was found by the model calling our KVK-directory MCP server through Otari.');
+  if (data.refused === 'budget') notes.push('Otari refused the call: this farmer\u2019s daily allowance (per-user budget) is used up.');
+  notes.push('Each farmer has a daily allowance enforced by Otari per-user budgets; the app has a monthly spend ceiling, and the diagnose policy drops to a cheaper model at 80% of budget.');
+  document.getElementById('trace-note').textContent = notes.join(' ');
+  card.hidden = !(data.trace && data.trace.length) && !data.stopped_by;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // private route status
+  const dot = document.getElementById('private-status');
+  if (dot) fetch('/api/private-status').then(r => r.json()).then(j => { dot.classList.add(j.awake ? 'kt-dot--on' : 'kt-dot--off'); dot.title = j.awake ? 'awake' : 'asleep: Otari will fall back to the open-weight policy'; }).catch(() => {});
+
+  const sb = document.getElementById('source-btn');
+  if (sb) {
+    sb.hidden = true;
+    sb.addEventListener('click', async () => {
+      if (!lastResult || !lastResult.cause) return;
+      sb.disabled = true; sb.textContent = 'SEARCHING…';
+      try {
+        const r = await fetch('/api/source', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cause: lastResult.cause, farmer: farmerId() }) });
+        const j = await r.json();
+        const card = document.getElementById('source-card');
+        document.getElementById('source-summary').textContent = j.error ? j.error : (j.summary || 'Sources found:');
+        const all = [...(j.sources || []).map(s => ({ ...s, t: 'extension' })), ...(j.other_sources || []).map(s => ({ ...s, t: 'other' }))];
+        document.getElementById('source-list').innerHTML = all.length ? all.map(s => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title || s.url)}</a> <small>${s.t === 'other' ? '(not an Indian extension site)' : ''}</small></li>`).join('') : '<li>No source found this time.</li>';
+        card.hidden = false;
+        if (j.trace) { lastResult.trace = [...(lastResult.trace || []), ...j.trace]; lastResult.otari_cost_usd = (Number(lastResult.otari_cost_usd) || 0) + (Number(j.otari_cost_usd) || 0); renderTrace(lastResult); }
+      } catch { /* ignore */ }
+      sb.textContent = '📚 FIND A SOURCE'; sb.disabled = false;
+    });
+  }
+
+  const cf = document.getElementById('calc-form');
+  if (cf) cf.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const q = document.getElementById('calc-q').value.trim(); if (!q) return;
+    const lang = (document.getElementById('lang') || {}).value || 'en';
+    const btn = document.getElementById('calc-btn'); const ld = document.getElementById('calc-loading'); const er = document.getElementById('calc-error'); const card = document.getElementById('calc-card');
+    btn.disabled = true; ld.hidden = false; er.hidden = true; card.hidden = true;
+    try {
+      const r = await fetch('/api/calc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, lang, farmer: farmerId() }) });
+      const j = await r.json();
+      if (!j.telegram) { er.textContent = j.error || 'Could not compute.'; er.hidden = false; }
+      else {
+        document.getElementById('calc-telegram').textContent = j.telegram;
+        document.getElementById('calc-answer').textContent = j.answer_en || (j.stopped_by ? 'Stopped by ' + j.stopped_by : '');
+        document.getElementById('calc-python').textContent = j.python || '(no code returned)';
+        document.getElementById('calc-receipt').textContent = (j.trace || []).map(t => `${ROLE_LABEL[t.role] || t.role}: ${t.served || t.error} ${t.ms ? t.ms + ' ms' : ''} ${t.cost_usd != null ? 'US$' + Number(t.cost_usd).toFixed(6) : ''}`).join(' · ');
+        card.hidden = false;
+      }
+    } catch { er.textContent = 'Network error.'; er.hidden = false; }
+    btn.disabled = false; ld.hidden = true;
   });
 });

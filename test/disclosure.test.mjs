@@ -13,6 +13,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 
 const DISCLOSURE = 'Built by Tab, an AI assistant, using Kiro, for team lead Akshay Wagh.';
+// The otari-branch page carries the hackathon-wide line (the Kiro origin is stated next to it).
+const SITE_DISCLOSURE = 'Built by Tab, an AI assistant, for team lead Akshay Wagh.';
 
 test('README.md exists', () => {
   let content;
@@ -45,8 +47,8 @@ test('site/index.html exists', () => {
 test('site/index.html contains the required disclosure line in the footer', () => {
   const content = readFileSync(join(ROOT, 'site', 'index.html'), 'utf8');
   assert.ok(
-    content.includes(DISCLOSURE),
-    `index.html must contain: "${DISCLOSURE}"`
+    content.includes(SITE_DISCLOSURE),
+    `index.html must contain: "${SITE_DISCLOSURE}"`
   );
 });
 

@@ -67,7 +67,7 @@ const INGEST_RE = /(drank|drink|drunk|drinking|ate|eaten|swallow\w*|consum\w*|pi
 
 // Pesticide name / dose patterns
 const PESTICIDE_NAMES_RE = /endosulfan|chlorpyrifos|monocrotophos|quinalphos|profenofos|cypermethrin|lambda[\s-]cyhalothrin|imidacloprid|acephate|malathion|dimethoate|phorate|carbofuran|methomyl|trichlorfon/iu;
-const DOSE_RE = /\b(dose|dosage|kitni\s+maatra|kiti\s+dose|kitna\s+dalen|kiti\s+ghyavi|concentration|ml\s+per|gram\s+per|gm\s+per|litre\s+per)\b/iu;
+const DOSE_RE = /\b(dose|dosage|kitni\s+maatra|kiti\s+dose|kitna\s+dalen|kiti\s+ghyavi|concentration|ml\s+per|gram\s+per|gm\s+per|litre\s+per(?!\s+(?:hour|hr|minute|min|second|sec|day)\b))\b/iu;
 
 /**
  * Safety telegrams per language (Roman script throughout so Morse works).
@@ -186,12 +186,12 @@ export function findKvk(kvkData, state, district) {
 const OTARI_BASE = 'https://otari.ai/api/v1';
 const SECRETS = {}; // filled at publish time only (never committed)
 export const POLICY = {
-  diagnose: 'krishi-diagnose',   // Qwen3.5-35B-A3B -> Llama-3.3-70B -> Gemma-3-27B; tier-down to Gemma at 80% budget
+  diagnose: 'krishi-diagnose',   // Qwen3-235B-A22B-Instruct -> Llama-3.3-70B -> Gemma-3-27B; tier-down to Gemma at 80% budget
   telegraph: 'krishi-telegraph', // Gemma-3-27B -> Gemma-3-12B -> Llama-3.3-70B (Roman Hindi / Marathi writer)
   judge: 'krishi-judge',         // Qwen3Guard-Gen-8B -> Llama-Guard-4-12B (safety judge on the advice)
   calc: 'krishi-calc',           // Qwen3.5-35B-A3B + otari_code_execution
-  locate: 'krishi-calc',         // same tool-capable model, calls our KVK MCP server through Otari
-  research: 'krishi-calc',       // same model + otari_web_search
+  research: 'krishi-research',  // Qwen3-235B-A22B-Instruct -> Qwen3.5-35B (web search + MCP tool use)
+  locate: 'krishi-research',         // same tool-capable model, calls our KVK MCP server through Otari
 };
 export const PRIVATE_MODEL = 'llamacpp:huihui-qwythos-9b-abliterated-q4k';
 const PRIVATE_HEALTH = 'https://tab-llm-p76jwv764jr9crggw-8080.app.github.dev/health';
@@ -340,8 +340,14 @@ export function judgeVerdict(content) {
 }
 
 // Role 4 — locate the farmer's KVK through our MCP server (when no dropdown choice).
+/** Short prompt for the small self-hosted CPU model: fewer prompt tokens = faster first token. */
+export function privatePrompt() {
+  return 'You are a crop doctor for Indian farmers. Name the most likely cause. Never name a chemical or a dose. ' +
+    'Reply ONLY with JSON {"cause": string (CAPS), "actions": [3 short CAPS strings], "telegram_en": string (CAPS, A-Z digits spaces, STOP between sentences, max 20 words not counting STOP, end with CONSULT KVK STOP)}.';
+}
+
 export function locatePrompt() {
-  return 'The user is an Indian farmer. If their message names a place in India (village, taluka, town or district), call the find_kvk tool with the most likely state and district. ' +
+  return 'The user is an Indian farmer. If their message names a place in India (village, taluka, town or district), call the find_kvk tool with the most likely state and district, plus the town or taluka as place when one is named. Pick the result whose address is in or nearest that place. ' +
     'Reply ONLY with JSON {"state": string|null, "district": string|null, "kvk": string|null, "host": string|null} copied from the tool result; if no place is named or the tool finds nothing, reply {"state":null,"district":null,"kvk":null,"host":null}.';
 }
 
@@ -352,10 +358,10 @@ export function looksLikePlace(text) {
 async function runDiagnose(env, text, { privateRoute, user }) {
   const body = {
     messages: [{ role: 'system', content: diagnosePrompt() }, { role: 'user', content: text }],
-    max_tokens: 1800, temperature: 0.3,
+    max_tokens: 700, temperature: 0.3,
   };
   if (privateRoute) {
-    const r = await otariStream(env, { ...body, model: PRIVATE_MODEL, max_tokens: 400, chat_template_kwargs: { enable_thinking: false } }, { role: 'diagnose-private', user, timeoutMs: 75000 });
+    const r = await otariStream(env, { ...body, model: PRIVATE_MODEL, messages: [{ role: 'system', content: privatePrompt() }, { role: 'user', content: text }], max_tokens: 160, reasoning_effort: 'none' }, { role: 'diagnose-private', user, timeoutMs: 55000 });
     const j = r.ok ? parseJsonLoose(r.content) : null;
     if (j && j.cause && j.telegram_en) return { j, traces: [r.trace] };
     r.trace.note = 'private route failed; Otari policy takes over';
@@ -486,7 +492,10 @@ async function handleTelegram(request, env) {
   ]);
   traces.push(...diag.traces); if (loc.trace) traces.push(loc.trace);
   if (!kvkMatch && loc.kvk && kvkData) {
-    const real = findKvk(kvkData, loc.kvk.state || '', loc.kvk.district || '');
+    // Only trust a KVK that really exists in our directory: re-find the one the model picked.
+    const cands = kvkSearch(kvkData, loc.kvk.state || '', loc.kvk.district || '');
+    const picked = String(loc.kvk.kvk || '').toLowerCase().slice(0, 40);
+    const real = cands.find(k => picked && (k.kvk || '').toLowerCase().startsWith(picked)) || cands[0] || null;
     if (real) kvkMatch = { ...real, via: 'mcp' };
   }
 
@@ -550,13 +559,13 @@ async function handleSource(request, env) {
   const user = await farmerUser(b.farmer);
   const r = await otari(env, {
     model: POLICY.research,
-    messages: [{ role: 'system', content: 'Search once for an Indian public agricultural extension page (ICAR institute, state agricultural university, KVK, Vikaspedia or a government agriculture department) on managing the named crop problem. Then reply in one short English sentence saying what the best source recommends first. Never recommend a chemical product or quantity.' },
+    messages: [{ role: 'system', content: 'Search once for an Indian public agricultural extension page (ICAR institute, state agricultural university, KVK, Vikaspedia or a government agriculture department) on managing the named crop problem. Then reply in one short plain English sentence (no markdown) saying what the best source recommends first. Never recommend a chemical product or quantity.' },
       { role: 'user', content: `${cause}${crop ? ' in ' + crop : ''}, India` }],
     tools: [{ type: 'otari_web_search', max_uses: 1 }], max_tokens: 1200,
   }, { role: 'source-websearch', user, timeoutMs: 27000 });
   if (!r.ok) { const ref = refusalTelegram(r, 'en'); return jsonResponse({ error: ref ? 'Daily allowance used' : (r.error || 'search failed'), trace: [r.trace] }, ref ? 429 : 502); }
   const { trusted, other } = pickSources(r.data.otari_tool_calls);
-  let summary = String(r.content || '').trim().slice(0, 300);
+  let summary = String(r.content || '').replace(/[*_#`]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 300);
   if (safetyFloor(summary).blocked) summary = '';
   return jsonResponse({ summary, sources: trusted.slice(0, 3), other_sources: other.slice(0, 2), trace: [r.trace], otari_cost_usd: sumCost([r.trace]) });
 }
@@ -591,13 +600,15 @@ async function handleCalc(request, env) {
 export const MCP_TOOLS = [{
   name: 'find_kvk',
   description: 'Find the ICAR Krishi Vigyan Kendra (KVK, farm science centre) for an Indian state and district. Returns up to 3 matches with the KVK address, host institution and the ICAR source page.',
-  inputSchema: { type: 'object', properties: { state: { type: 'string', description: 'Indian state, e.g. Maharashtra' }, district: { type: 'string', description: 'District, e.g. Pune' } }, required: ['state', 'district'] },
+  inputSchema: { type: 'object', properties: { state: { type: 'string', description: 'Indian state, e.g. Maharashtra' }, district: { type: 'string', description: 'District, e.g. Pune' }, place: { type: 'string', description: 'Optional town, taluka or village the farmer named, e.g. Baramati; KVKs located there are listed first' } }, required: ['state', 'district'] },
 }];
-export function kvkSearch(kvkData, state, district) {
+export function kvkSearch(kvkData, state, district, place = '') {
   if (!kvkData) return [];
-  const s = String(state || '').toLowerCase().trim(); const dd = String(district || '').toLowerCase().trim();
+  const s = String(state || '').toLowerCase().trim(); const dd = String(district || '').toLowerCase().trim(); const pl = String(place || '').toLowerCase().trim();
   if (!dd) return [];
-  return kvkData.kvks.filter(k => (!s || (k.state || '').toLowerCase() === s) && (((k.district || '').toLowerCase().includes(dd)) || (k.kvk || '').toLowerCase().includes(dd))).slice(0, 3);
+  const hits = kvkData.kvks.filter(k => (!s || (k.state || '').toLowerCase() === s) && (((k.district || '').toLowerCase().includes(dd)) || (k.kvk || '').toLowerCase().includes(dd)));
+  if (pl.length >= 3) hits.sort((a, b) => Number(((b.kvk || '') + ' ' + (b.host || '')).toLowerCase().includes(pl)) - Number(((a.kvk || '') + ' ' + (a.host || '')).toLowerCase().includes(pl)));
+  return hits.slice(0, 3);
 }
 async function handleMcp(request, env) {
   const tok = secret(env, 'MCP_TOKEN');
@@ -614,7 +625,7 @@ async function handleMcp(request, env) {
       case 'tools/call': {
         if (msg.params?.name !== 'find_kvk') return { jsonrpc: '2.0', id: msg.id, error: { code: -32602, message: 'Unknown tool' } };
         const a = msg.params.arguments || {};
-        const hits = kvkSearch(await loadKvkData(env), a.state, a.district);
+        const hits = kvkSearch(await loadKvkData(env), a.state, a.district, a.place);
         return ok({ content: [{ type: 'text', text: JSON.stringify(hits.length ? hits : { found: 0, note: 'No KVK matched; try the district headquarters name.' }) }], isError: false });
       }
       default: return { jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: 'Method not found' } };
