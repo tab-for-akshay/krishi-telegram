@@ -1,5 +1,8 @@
 # Krishi Telegram
 
+**Live:** https://krishi-telegram.vercel.app (Vercel) · mirror: https://krishi-telegram.sites.tab.bot
+
+
 **Kiroween 2026 Hackathon — Category: RESURRECTION**
 
 > *"What hath God wrought"* — first US telegram, 1844.
