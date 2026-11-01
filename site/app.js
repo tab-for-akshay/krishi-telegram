@@ -215,7 +215,10 @@ function renderTelegram(data) {
   const cost = document.getElementById('telegram-cost');
   const dateEl = document.getElementById('telegram-date');
   const causeEl = document.getElementById('telegram-cause');
+  const nativeEl = document.getElementById('telegram-native');
   const playBtn = document.getElementById('play-morse');
+  const smsBtn = document.getElementById('sms-btn');
+  const copyBtn = document.getElementById('copy-btn');
 
   body.textContent = data.telegram;
   words.textContent = data.words;
@@ -226,6 +229,16 @@ function renderTelegram(data) {
     causeEl.hidden = false;
   } else if (causeEl) {
     causeEl.hidden = true;
+  }
+
+  // Native Devanagari line (R2) — only shown when valid
+  if (nativeEl) {
+    if (data.native && /[\u0900-\u097F]/.test(data.native)) {
+      nativeEl.textContent = data.native;
+      nativeEl.hidden = false;
+    } else {
+      nativeEl.hidden = true;
+    }
   }
 
   // Format cost
@@ -248,6 +261,17 @@ function renderTelegram(data) {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (AudioCtx && data.morse) {
     playBtn.hidden = false;
+  }
+
+  // SMS button (R3) — sms: link with Roman telegram body
+  if (smsBtn && data.telegram) {
+    smsBtn.href = `sms:?body=${encodeURIComponent(data.telegram)}`;
+    smsBtn.hidden = false;
+  }
+
+  // Copy button (R3)
+  if (copyBtn) {
+    copyBtn.hidden = false;
   }
 }
 
@@ -352,14 +376,27 @@ function clearError() {
 // ---------------------------------------------------------------------------
 // State dropdown population (from kvk.json via ASSETS)
 // ---------------------------------------------------------------------------
+let _kvkData = null;
+
+async function loadKvkData() {
+  if (_kvkData) return _kvkData;
+  try {
+    const res = await fetch('/data/kvk.json');
+    if (!res.ok) return null;
+    _kvkData = await res.json();
+  } catch (_err) {
+    // Silently fail — KVK data is optional
+  }
+  return _kvkData;
+}
+
 async function populateStates() {
   const stateSelect = document.getElementById('state');
   if (!stateSelect) return;
 
   try {
-    const res = await fetch('/data/kvk.json');
-    if (!res.ok) return;
-    const kvkData = await res.json();
+    const kvkData = await loadKvkData();
+    if (!kvkData) return;
 
     // Collect unique states in document order
     const seen = new Set();
@@ -388,6 +425,194 @@ async function populateStates() {
 }
 
 // ---------------------------------------------------------------------------
+// Page weight footer (R4)
+// ---------------------------------------------------------------------------
+async function loadPageWeight() {
+  const el = document.getElementById('page-weight');
+  if (!el) return;
+  try {
+    const res = await fetch('/weight.json');
+    if (!res.ok) return;
+    const data = await res.json();
+    const kb = data && data.gzip_kb != null ? data.gzip_kb : null;
+    if (kb != null) {
+      el.textContent = `PAGE WEIGHS ${kb} KB STOP`;
+    }
+  } catch (_err) {
+    // Silently fail — weight is informational
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Print script toggle (R2) — Roman / Devanagari
+// ---------------------------------------------------------------------------
+function setupPrintToggle() {
+  const toggle = document.getElementById('print-script-toggle');
+  if (!toggle) return;
+
+  // Restore saved value
+  const saved = localStorage.getItem('kt-print-script') || 'roman';
+  toggle.value = saved;
+  applyPrintScript(saved);
+
+  toggle.addEventListener('change', () => {
+    const val = toggle.value;
+    localStorage.setItem('kt-print-script', val);
+    applyPrintScript(val);
+  });
+}
+
+function applyPrintScript(script) {
+  const body = document.getElementById('telegram-body');
+  const nativeEl = document.getElementById('telegram-native');
+  if (!body || !nativeEl) return;
+  if (script === 'devanagari' && !nativeEl.hidden) {
+    body.classList.add('kt-print-hide');
+    nativeEl.classList.add('kt-print-show');
+  } else {
+    body.classList.remove('kt-print-hide');
+    nativeEl.classList.remove('kt-print-show');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Find my KVK (R1) — client-side lookup without API call
+// ---------------------------------------------------------------------------
+function setupFindKvk() {
+  const findBtn = document.getElementById('find-kvk-btn');
+  if (!findBtn) return;
+
+  findBtn.addEventListener('click', async () => {
+    const stateSelect = document.getElementById('state');
+    const districtInput = document.getElementById('district');
+    const state = stateSelect ? stateSelect.value : '';
+    const district = districtInput ? districtInput.value.trim() : '';
+
+    const finderResult = document.getElementById('kvk-finder-result');
+    if (!finderResult) return;
+
+    if (!state || !district) {
+      finderResult.hidden = false;
+      document.getElementById('kvk-finder-name').textContent = 'Please select a state and enter a district to find your KVK.';
+      document.getElementById('kvk-finder-host').textContent = '';
+      const src = document.getElementById('kvk-finder-source');
+      if (src) src.hidden = true;
+      finderResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+
+    try {
+      const kvkData = await loadKvkData();
+      if (!kvkData || !Array.isArray(kvkData.kvks)) {
+        finderResult.hidden = false;
+        document.getElementById('kvk-finder-name').textContent = 'KVK data not available.';
+        document.getElementById('kvk-finder-host').textContent = '';
+        const src = document.getElementById('kvk-finder-source');
+        if (src) src.hidden = true;
+        finderResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+      }
+
+      // Client-side lookup matching the worker's findKvk logic
+      const stateNorm = state.trim().toLowerCase();
+      const distNorm = district.trim().toLowerCase();
+      const stateMatches = kvkData.kvks.filter(k => k.state && k.state.toLowerCase() === stateNorm);
+      const match = stateMatches.find(k => {
+        if (k.district && k.district.toLowerCase().includes(distNorm)) return true;
+        if (k.kvk && k.kvk.toLowerCase().includes(distNorm)) return true;
+        return false;
+      });
+
+      finderResult.hidden = false;
+      const nameEl = document.getElementById('kvk-finder-name');
+      const hostEl = document.getElementById('kvk-finder-host');
+      const sourceEl = document.getElementById('kvk-finder-source');
+
+      if (match) {
+        nameEl.textContent = match.kvk || '';
+        hostEl.textContent = match.host || '';
+        if (sourceEl && match.source) {
+          sourceEl.href = match.source;
+          sourceEl.hidden = false;
+        } else if (sourceEl) {
+          sourceEl.hidden = true;
+        }
+      } else {
+        nameEl.textContent = `No KVK found for "${district}" in ${state}. Try a nearby district name.`;
+        hostEl.textContent = '';
+        if (sourceEl) sourceEl.hidden = true;
+      }
+
+      finderResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (_err) {
+      finderResult.hidden = false;
+      document.getElementById('kvk-finder-name').textContent = 'Could not load KVK data. Please try again.';
+      document.getElementById('kvk-finder-host').textContent = '';
+      const src = document.getElementById('kvk-finder-source');
+      if (src) src.hidden = true;
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Example chips (R1)
+// ---------------------------------------------------------------------------
+function setupChips() {
+  const chips = document.querySelectorAll('.kt-chip');
+  const questionEl = document.getElementById('question');
+  const langSelect = document.getElementById('lang');
+
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      const q = chip.dataset.q;
+      const lang = chip.dataset.lang;
+      if (questionEl) questionEl.value = q;
+      if (langSelect && lang) {
+        langSelect.value = lang;
+        localStorage.setItem('kt-lang', lang);
+      }
+      // Auto-submit the form
+      const form = document.getElementById('telegram-form');
+      if (form) form.requestSubmit();
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Copy button (R3)
+// ---------------------------------------------------------------------------
+function setupCopyButton(telegramText) {
+  const copyBtn = document.getElementById('copy-btn');
+  if (!copyBtn) return;
+
+  // Remove old listener by replacing with clone
+  const newBtn = copyBtn.cloneNode(true);
+  copyBtn.parentNode.replaceChild(newBtn, copyBtn);
+
+  newBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(telegramText);
+      const orig = newBtn.textContent;
+      newBtn.textContent = '✓ COPIED';
+      setTimeout(() => { newBtn.textContent = orig; }, 1500);
+    } catch (_err) {
+      // Fallback: select and copy
+      const ta = document.createElement('textarea');
+      ta.value = telegramText;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      const orig = newBtn.textContent;
+      newBtn.textContent = '✓ COPIED';
+      setTimeout(() => { newBtn.textContent = orig; }, 1500);
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Form submit handler
 // ---------------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
@@ -400,12 +625,25 @@ document.addEventListener('DOMContentLoaded', () => {
   const stateSelect = document.getElementById('state');
   const districtInput = document.getElementById('district');
   const kvkCard = document.getElementById('kvk-card');
+  const kvkFinderResult = document.getElementById('kvk-finder-result');
 
   // Print button
   printBtn.addEventListener('click', () => window.print());
 
   // Populate states
   populateStates();
+
+  // Load page weight
+  loadPageWeight();
+
+  // Setup print script toggle
+  setupPrintToggle();
+
+  // Setup example chips
+  setupChips();
+
+  // Setup Find my KVK
+  setupFindKvk();
 
   // Restore district from localStorage
   const savedDistrict = localStorage.getItem('kt-district') || '';
@@ -452,8 +690,13 @@ document.addEventListener('DOMContentLoaded', () => {
     clearError();
     card.hidden = true;
     if (kvkCard) kvkCard.hidden = true;
+    if (kvkFinderResult) kvkFinderResult.hidden = true;
     document.getElementById('play-morse').hidden = true;
     document.getElementById('stop-morse').hidden = true;
+    const smsBtn = document.getElementById('sms-btn');
+    if (smsBtn) smsBtn.hidden = true;
+    const copyBtn = document.getElementById('copy-btn');
+    if (copyBtn) copyBtn.hidden = true;
     const stripContainer = document.getElementById('morse-strip-container');
     if (stripContainer) stripContainer.hidden = true;
     if (activeMorseStop) {
@@ -485,12 +728,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
       renderTelegram(data);
 
+      // Setup copy button with current telegram text
+      setupCopyButton(data.telegram);
+
       // Render KVK card
       renderKvkCard(data.kvk);
 
       if (data.morse) {
         setupMorsePlayback(data.morse);
       }
+
+      // Apply print script preference
+      const toggle = document.getElementById('print-script-toggle');
+      if (toggle) applyPrintScript(toggle.value);
 
       // Scroll the result into view
       resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });

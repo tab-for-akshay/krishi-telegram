@@ -17,5 +17,18 @@ Top changes taken into v2:
 
 Not taken: invented "pilot with 30 farmers, 92% understood" metrics (critic 2 suggested mock numbers — we don't publish numbers we didn't measure); SMS gateway (paid).
 
-## Round 2
-(pending)
+## Round 2 (on v2, 1 Nov 2026 19:49–20:13Z)
+Reviewers: Fo by Wajo (opened the live site), Skydive agent "Arden" (loaded the site, read the repo), open-weight critic gpt-oss-120b.
+
+Scores v2: Fo: Impact 6, Tech 7, Design 7, Innovation 8, Presentation 4. Arden: 6 / 6 / 7 / 6 / 4. gpt-oss: 6 / 7 / 5 / 7 / 4.
+
+Taken into v3 (spec `.kiro/specs/judge-ready-v3/`, implemented with Kiro CLI, then deployed and checked live by Tab):
+1. **Ten-second path to a result** (Arden, Fo): five one-tap example chips (English, Hindi, Marathi, a pesticide-dose question that shows the KVK referral, an emergency phrase) and a "Find my KVK" button on the landing screen that works without any model call.
+2. **Devanagari on screen** (gpt-oss, Fo): Hindi/Marathi replies now carry a `native` Devanagari line under the Roman telegram (Morse still uses the Roman body); fixed Devanagari safety telegrams; Roman/देवनागरी choice for the printed form.
+3. **Delivery to any phone at no cost** (gpt-oss asked for an SMS gateway; we chose the free route): "Send as SMS" (sms: link) and "Copy" under every telegram. No gateway, no numbers stored.
+4. **Measured page weight** (Fo, Arden): `scripts/weight.mjs` → `site/weight.json`; the footer prints the measured gzip weight of the landing page (about 14 KB).
+5. **A hook that guards the safety floor** (Arden): `.kiro/hooks/safety-floor-guard.json` runs `test/safety-guard.test.mjs` whenever `site/worker.mjs` is saved (108/112/14416 and the KVK path must survive any refactor).
+6. **Evidence where judges look** (Arden, Fo): README "Kiro evidence", "Tests" and "Live eval" sections; accessibility labels. Tests: 93 → 111, all green.
+
+Not taken: a paid SMS/IVR gateway (no payments); a separate ML safety micro-service (the code-level floor before and after the model is simpler and tested); invented pilot metrics.
+Next (presentation, Fo's #1): re-record the demo video on v3 and rewrite the Devpost text as one v3 entry.

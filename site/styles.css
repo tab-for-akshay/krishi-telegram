@@ -785,3 +785,171 @@ body {
 .kt-kvk-source:focus {
   text-decoration: underline;
 }
+
+/* ==========================================================================
+   Judge-ready v3 additions
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Example chips (R1)
+   -------------------------------------------------------------------------- */
+.kt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.kt-chip {
+  background: var(--kt-paper-dark);
+  border: 1px solid var(--kt-paper-edge);
+  border-radius: 20px;
+  color: var(--kt-ink);
+  cursor: pointer;
+  font-family: var(--kt-font-body);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  padding: 0.35rem 0.85rem;
+  transition: background 0.15s, border-color 0.15s;
+  min-height: 36px;
+}
+
+.kt-chip:hover,
+.kt-chip:focus-visible {
+  background: var(--kt-paper-edge);
+  border-color: var(--kt-ink-light);
+  outline: none;
+}
+
+.kt-chip:focus-visible {
+  outline: 3px solid var(--kt-focus);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Find my KVK row (R1)
+   -------------------------------------------------------------------------- */
+.kt-kvk-finder-row {
+  margin-bottom: 1rem;
+}
+
+.kt-btn--secondary {
+  background: transparent;
+  color: var(--kt-ink-light);
+  border-color: var(--kt-paper-edge);
+  font-size: 0.82rem;
+}
+
+.kt-btn--secondary:hover {
+  background: var(--kt-paper-dark);
+}
+
+/* --------------------------------------------------------------------------
+   Native Devanagari line (R2)
+   -------------------------------------------------------------------------- */
+.kt-telegram-native {
+  font-family: 'Noto Sans Devanagari', 'Arial Unicode MS', sans-serif;
+  font-size: 1rem;
+  color: var(--kt-ink-light);
+  line-height: 1.7;
+  margin-top: 0.5rem;
+  margin-bottom: 0.25rem;
+  position: relative;
+  z-index: 1;
+  border-left: 3px solid var(--kt-paper-edge);
+  padding-left: 0.5rem;
+}
+
+/* --------------------------------------------------------------------------
+   SMS and Copy buttons (R3)
+   -------------------------------------------------------------------------- */
+.kt-btn--sms {
+  background: transparent;
+  color: var(--kt-ink-light);
+  border-color: var(--kt-paper-edge);
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.kt-btn--sms:hover,
+.kt-btn--sms:focus-visible {
+  background: var(--kt-paper-dark);
+  text-decoration: none;
+}
+
+.kt-btn--copy {
+  background: transparent;
+  color: var(--kt-ink-light);
+  border-color: var(--kt-paper-edge);
+  font-size: 0.8rem;
+}
+
+.kt-btn--copy:hover {
+  background: var(--kt-paper-dark);
+}
+
+/* --------------------------------------------------------------------------
+   Page weight in footer (R4)
+   -------------------------------------------------------------------------- */
+.kt-footer-weight {
+  color: rgba(245, 230, 200, 0.45);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.3rem;
+}
+
+/* --------------------------------------------------------------------------
+   Print toggle (R2) — visible only when printing
+   -------------------------------------------------------------------------- */
+.kt-print-toggle {
+  display: none; /* hidden on screen */
+}
+
+@media print {
+  .kt-print-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  .kt-telegram-native {
+    display: none; /* hidden by default in print; shown via kt-print-show */
+  }
+
+  .kt-telegram-native.kt-print-show {
+    display: block !important;
+  }
+
+  .kt-telegram-body.kt-print-hide {
+    display: none !important;
+  }
+
+  /* SMS / Copy not useful in print */
+  .kt-btn--sms,
+  .kt-btn--copy,
+  .kt-chips,
+  .kt-kvk-finder-row,
+  #kvk-finder-result {
+    display: none !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   360 px responsive adjustments (R6)
+   -------------------------------------------------------------------------- */
+@media (max-width: 390px) {
+  .kt-chips {
+    gap: 0.35rem;
+  }
+
+  .kt-chip {
+    font-size: 0.72rem;
+    padding: 0.3rem 0.65rem;
+  }
+
+  .kt-telegram-native {
+    font-size: 0.9rem;
+  }
+}

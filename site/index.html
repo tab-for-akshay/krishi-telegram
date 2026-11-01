@@ -46,6 +46,15 @@
           You will receive a crisp 20-word advisory — just like the old telegram service.
         </p>
 
+        <!-- Example chips (R1) -->
+        <div class="kt-chips" role="group" aria-label="Example questions — tap to fill">
+          <button type="button" class="kt-chip" aria-label="Example: wheat leaves turning yellow (English)" data-q="My wheat leaves are turning yellow and curling at the tips" data-lang="en">🌾 Wheat yellow leaves</button>
+          <button type="button" class="kt-chip" aria-label="Example: tomato fruit rot (Hindi)" data-q="Mere tamatar mein kaala daag aa raha hai aur phal sadne lage hain" data-lang="hi">🍅 Tamatar kaala daag</button>
+          <button type="button" class="kt-chip" aria-label="Example: cotton aphids (Marathi)" data-q="Mazya kapas pikavar chikkat kide aahet, pane chipchipat aahet" data-lang="mr">🌿 Kapus kide</button>
+          <button type="button" class="kt-chip" aria-label="Example: pesticide dose question (shows KVK referral)" data-q="What is the dosage of chlorpyrifos for my rice crop?" data-lang="en">⚠️ Pesticide dose</button>
+          <button type="button" class="kt-chip" aria-label="Example: emergency safety phrase" data-q="Maine zeher pi liya, kya karu?" data-lang="hi">🆘 Emergency phrase</button>
+        </div>
+
         <form id="telegram-form" novalidate>
           <div class="kt-field">
             <label class="kt-label" for="question">Your farm question</label>
@@ -96,6 +105,18 @@
             />
           </div>
 
+          <!-- Find my KVK button (R1) -->
+          <div class="kt-kvk-finder-row">
+            <button
+              type="button"
+              id="find-kvk-btn"
+              class="kt-btn kt-btn--secondary"
+              aria-label="Find my Krishi Vigyan Kendra"
+            >
+              📍 Find my KVK
+            </button>
+          </div>
+
           <button
             type="submit"
             id="send-btn"
@@ -106,6 +127,14 @@
           </button>
         </form>
       </section>
+
+      <!-- KVK finder result (R1) — shown when "Find my KVK" is used without sending -->
+      <aside id="kvk-finder-result" class="kt-kvk-card" hidden aria-label="KVK finder result">
+        <h3 class="kt-kvk-title">&#128205; YOUR LOCAL KRISHI VIGYAN KENDRA</h3>
+        <p id="kvk-finder-name" class="kt-kvk-name"></p>
+        <p id="kvk-finder-host" class="kt-kvk-host"></p>
+        <a id="kvk-finder-source" class="kt-kvk-source" href="#" target="_blank" rel="noopener noreferrer">ICAR source &#8599;</a>
+      </aside>
 
       <!-- Result area — hidden until response -->
       <section
@@ -155,6 +184,9 @@
 
           <p id="telegram-body" class="kt-telegram-body"></p>
 
+          <!-- Native Devanagari line (R2) — shown only when valid -->
+          <p id="telegram-native" class="kt-telegram-native" hidden aria-label="Telegram in Devanagari script"></p>
+
           <div class="kt-telegram-divider" aria-hidden="true">&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;&#9135;</div>
 
           <p class="kt-telegram-cost">
@@ -192,6 +224,26 @@
             >
               &#128438; PRINT TELEGRAM
             </button>
+            <!-- Send as SMS (R3) -->
+            <a
+              id="sms-btn"
+              class="kt-btn kt-btn--sms"
+              href="#"
+              role="button"
+              aria-label="Send this telegram as SMS"
+              hidden
+            >
+              &#128241; SEND AS SMS
+            </a>
+            <!-- Copy button (R3) -->
+            <button
+              id="copy-btn"
+              class="kt-btn kt-btn--copy"
+              aria-label="Copy telegram text to clipboard"
+              hidden
+            >
+              &#128203; COPY
+            </button>
           </div>
 
         </article>
@@ -214,13 +266,23 @@
         For emergencies, call <strong>108</strong> or <strong>112</strong>.
         Tele-MANAS: <strong>14416</strong>.
       </p>
+      <p id="page-weight" class="kt-footer-weight" aria-label="Page weight indicator"></p>
       <p class="kt-footer-attribution">
-        Built by Tab, an AI assistant, using Kiro, for team lead Akshay Wagh.
+        Built by Tab, an AI assistant, for team lead Akshay Wagh. Made with Kiro.
       </p>
       <p class="kt-footer-legal">
         &copy; 2026 Krishi Telegram &middot; MIT Licence &middot; Kiroween Hackathon
       </p>
     </footer>
+
+    <!-- Roman / देवनागरी print toggle (R2) — only visible when printing -->
+    <div class="kt-print-toggle" aria-hidden="true">
+      <label for="print-script-toggle" class="kt-print-toggle-label">Print script:</label>
+      <select id="print-script-toggle" class="kt-select kt-print-toggle-select" aria-label="Choose print script: Roman or Devanagari">
+        <option value="roman">Roman (A-Z)</option>
+        <option value="devanagari">देवनागरी</option>
+      </select>
+    </div>
 
   </div><!-- .kt-page -->
 

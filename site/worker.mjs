@@ -93,6 +93,21 @@ export const SAFETY_TELEGRAMS = {
 };
 
 /**
+ * Fixed Devanagari safety telegrams for HI and MR.
+ * These are shown as the `native` overlay when the safety floor triggers.
+ */
+export const SAFETY_NATIVE = {
+  emergency: {
+    hi: 'रुकें — आपातकाल — अभी 108 पर कॉल करें — 112 पर भी कॉल करें — टेली-मानस 14416 — देरी मत करें — तुरंत मदद लें',
+    mr: 'थांबा — आणीबाणी — आत्ता 108 ला कॉल करा — 112 लाही कॉल करा — टेली-मानस 14416 — उशीर करू नका — लगेच मदत घ्या',
+  },
+  kvk: {
+    hi: 'केवीके विशेषज्ञ से सलाह लें — कीटनाशक मात्रा के लिए विशेषज्ञ चाहिए — अपने स्थानीय कृषि विज्ञान केंद्र पर कॉल करें',
+    mr: 'केव्हीके तज्ञांकडे जा — कीटकनाशक मात्रेसाठी तज्ञ लागतो — तुमच्या स्थानिक कृषी विज्ञान केंद्राला कॉल करा',
+  },
+};
+
+/**
  * Check text for safety-critical content.
  * @param {string} text
  * @param {string} [lang='en']
@@ -107,6 +122,7 @@ export function safetyFloor(text, lang = 'en', kvkMatch = null) {
     return {
       blocked: true,
       telegram: SAFETY_TELEGRAMS.emergency[safetyLang],
+      native: (safetyLang === 'hi' || safetyLang === 'mr') ? SAFETY_NATIVE.emergency[safetyLang] : null,
       reason: 'self_harm',
     };
   }
@@ -119,7 +135,12 @@ export function safetyFloor(text, lang = 'en', kvkMatch = null) {
     } else {
       telegram = SAFETY_TELEGRAMS.kvk[safetyLang];
     }
-    return { blocked: true, telegram, reason: 'pesticide_dose' };
+    return {
+      blocked: true,
+      telegram,
+      native: (safetyLang === 'hi' || safetyLang === 'mr') ? SAFETY_NATIVE.kvk[safetyLang] : null,
+      reason: 'pesticide_dose',
+    };
   }
   return { blocked: false };
 }
@@ -190,20 +211,26 @@ function buildSystemPrompt(lang) {
     : lang === 'mr'
     ? 'Write the telegram in MARATHI using Roman letters, NOT in English, e.g. "PANDHRYA MASHIMULE PAN GUNDALNE VIRUS STOP BADHIT ROPE UPTUN TAKA STOP PIVLE CHIKAT SAPLE LAVA STOP". '
     : 'Write the telegram in plain English. ';
+  const nativeField = (lang === 'hi' || lang === 'mr')
+    ? ' Also add a "native" key with the same advisory in Devanagari script (Unicode, proper ' + (lang === 'hi' ? 'Hindi' : 'Marathi') + ').'
+    : '';
+  const jsonShape = (lang === 'hi' || lang === 'mr')
+    ? '"telegram" (string), "words" (number), "cause" (string, in English), "native" (string, Devanagari)'
+    : '"telegram" (string), "words" (number) and "cause" (string, in English)';
   return (
     'You are a terse Indian agricultural telegram service from the 1960s, advising smallholder farmers. ' +
     'The farmer chose ' + langName + '. ' + langRule +
-    'Use only letters A-Z, digits and spaces (no Devanagari, no punctuation). ' +
-    'Respond ONLY with a JSON object with exactly three keys: "telegram" (string), "words" (number) and "cause" (string, in English). ' +
+    'Use only letters A-Z, digits and spaces (no Devanagari, no punctuation) in the "telegram" field. ' +
+    'Respond ONLY with a JSON object with exactly these keys: ' + jsonShape + '.' + nativeField + ' ' +
     'First decide the single most likely cause for the symptoms in Indian field conditions: think of the common pests, viral diseases spread by insects (for example leaf curl virus spread by whitefly when leaves curl in tomato, chilli or cotton), fungal and bacterial diseases, and only then nutrient deficiency or water stress. Name it specifically in "cause". ' +
     'The telegram must be ALL UPPERCASE, use STOP to separate sentences, contain at most 20 content words (STOPs do not count), and begin with the cause. ' +
     'Give practical, safe, low-cost actions (cultural, mechanical, biological, sticky traps, neem-based, removing infected plants, seeking KVK confirmation). ' +
     'Do NOT mention any chemical pesticide or fungicide names, doses or compounds. ' +
     'Do NOT include self-harm or emergency information; that is handled separately. ' +
     (lang === 'hi'
-      ? 'Example: {"telegram":"SAFED MAKKHI SE PATTA MOD VIRUS STOP MUDE PAUDHE UKHAADEN STOP PEELE CHIPCHIPE TRAP LAGAYEN STOP NEEM TEL CHHIDKEN STOP","words":16,"cause":"LEAF CURL VIRUS (WHITEFLY)"}. Every word except STOP, KVK and numbers must be Hindi.'
+      ? 'Example: {"telegram":"SAFED MAKKHI SE PATTA MOD VIRUS STOP MUDE PAUDHE UKHAADEN STOP PEELE CHIPCHIPE TRAP LAGAYEN STOP NEEM TEL CHHIDKEN STOP","words":16,"cause":"LEAF CURL VIRUS (WHITEFLY)","native":"सफेद मक्खी से पत्ता मोड़ वायरस स्टॉप मुड़े पौधे उखाड़ें स्टॉप पीले चिपचिपे ट्रैप लगाएं स्टॉप नीम तेल छिड़कें"}. Every word in "telegram" except STOP, KVK and numbers must be Hindi. "native" must be Devanagari script.'
       : lang === 'mr'
-      ? 'Example: {"telegram":"PANDHRI MASHI PAN GUNDALNE VIRUS STOP GUNDALLELI ROPE UPTUN TAKA STOP PIVLE CHIKAT SAPLE LAVA STOP NEEM TEL FAVARA STOP","words":16,"cause":"LEAF CURL VIRUS (WHITEFLY)"}. Every word except STOP, KVK and numbers must be Marathi.'
+      ? 'Example: {"telegram":"PANDHRI MASHI PAN GUNDALNE VIRUS STOP GUNDALLELI ROPE UPTUN TAKA STOP PIVLE CHIKAT SAPLE LAVA STOP NEEM TEL FAVARA STOP","words":16,"cause":"LEAF CURL VIRUS (WHITEFLY)","native":"पांढरी माशी पान गुंडाळणे व्हायरस स्टॉप गुंडाळलेली रोपे उपटून टाका स्टॉप पिवळे चिकट सापळे लावा स्टॉप नीम तेल फवारा"}. Every word in "telegram" except STOP, KVK and numbers must be Marathi. "native" must be Devanagari script.'
       : 'Example: {"telegram":"WHITEFLY LEAF CURL VIRUS STOP UPROOT CURLED PLANTS STOP SET YELLOW STICKY TRAPS STOP SPRAY NEEM OIL STOP","words":14,"cause":"LEAF CURL VIRUS (WHITEFLY)"}')
   );
 }
@@ -259,6 +286,13 @@ async function callGroqOnce(apiKey, model, userText, lang, url = GROQ_API_URL) {
   }
   if (typeof parsed.cause !== 'string' || parsed.cause.trim() === '') {
     throw new Error('Model response missing cause field');
+  }
+
+  // Validate native field: must contain at least one Devanagari character
+  if (parsed.native !== undefined) {
+    if (typeof parsed.native !== 'string' || !/[\u0900-\u097F]/.test(parsed.native)) {
+      parsed.native = null; // hide invalid native
+    }
   }
 
   // Count words in code; never trust the model's own count.
@@ -328,6 +362,7 @@ async function handleTelegram(request, env) {
       words,
       cost_paise: costPaise(words),
       morse,
+      native: safety.native || null,
       kvk: kvkMatch ? { district: kvkMatch.district, kvk: kvkMatch.kvk, host: kvkMatch.host, source: kvkMatch.source } : null,
     });
   }
@@ -369,6 +404,7 @@ async function handleTelegram(request, env) {
       words: safeWords,
       cost_paise: costPaise(safeWords),
       morse: morseEncode(safeTelegram),
+      native: postSafety.native || null,
       kvk: kvkMatch ? { district: kvkMatch.district, kvk: kvkMatch.kvk, host: kvkMatch.host, source: kvkMatch.source } : null,
     });
   }
@@ -376,12 +412,17 @@ async function handleTelegram(request, env) {
   const cost_paise = costPaise(words);
   const morse = morseEncode(telegram);
 
+  // Validate native field from model
+  const nativeRaw = modelResult.native;
+  const native = (typeof nativeRaw === 'string' && /[\u0900-\u097F]/.test(nativeRaw)) ? nativeRaw : null;
+
   return jsonResponse({
     telegram,
     words,
     cost_paise,
     morse,
     cause: cause || null,
+    native,
     model,
     kvk: kvkMatch ? { district: kvkMatch.district, kvk: kvkMatch.kvk, host: kvkMatch.host, source: kvkMatch.source } : null,
   });

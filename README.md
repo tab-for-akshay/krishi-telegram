@@ -120,9 +120,9 @@ This project was built using **Kiro**, an AI-assisted development tool, followin
 
 | File | Purpose |
 |---|---|
-| `product.md` | Vision, problem, target users, experience pillars |
-| `tech.md` | Stack, runtime, constraints, key decisions |
-| `structure.md` | Directory layout, naming conventions |
+| [`product.md`](.kiro/steering/product.md) | Vision, problem, target users, experience pillars |
+| [`tech.md`](.kiro/steering/tech.md) | Stack, runtime, constraints, key decisions |
+| [`structure.md`](.kiro/steering/structure.md) | Directory layout, naming conventions |
 
 Steering files guide every file the agent creates. They ensure the AI never drifts from the product vision.
 
@@ -151,6 +151,58 @@ Configured to run `node --test` automatically whenever a file in `site/` is save
 7. README + LICENSE
 8. `node --test` → all tests pass
 9. Tick tasks.md checkboxes
+
+---
+
+## Kiro Evidence
+
+All artifacts produced by the Kiro AI agent during this build:
+
+| Artifact | Path |
+|---|---|
+| Spec v1 (last-telegram) | [`.kiro/specs/last-telegram/`](.kiro/specs/last-telegram/) |
+| Spec v2 (field-ready-v2) | [`.kiro/specs/field-ready-v2/`](.kiro/specs/field-ready-v2/) |
+| Spec v3 (judge-ready-v3) | [`.kiro/specs/judge-ready-v3/`](.kiro/specs/judge-ready-v3/) |
+| Steering: product | [`.kiro/steering/product.md`](.kiro/steering/product.md) |
+| Steering: tech | [`.kiro/steering/tech.md`](.kiro/steering/tech.md) |
+| Steering: structure | [`.kiro/steering/structure.md`](.kiro/steering/structure.md) |
+| Hook: test-on-save | [`.kiro/hooks/test-on-save.json`](.kiro/hooks/test-on-save.json) |
+| Hook: safety-floor-guard | [`.kiro/hooks/safety-floor-guard.json`](.kiro/hooks/safety-floor-guard.json) |
+| Eval set | [`eval/cases.json`](eval/cases.json) |
+
+---
+
+## Tests
+
+Run with: `node --test`
+
+All tests use the Node.js built-in test runner — no extra packages needed.
+
+**Current pass count: 111 tests, 0 failures.**
+
+Test files:
+
+| File | What it covers |
+|---|---|
+| `test/morse.test.mjs` | Morse encoder unit tests |
+| `test/pricing.test.mjs` | Word counter and cost calculation |
+| `test/safety.test.mjs` | Safety floor trigger tests |
+| `test/lang.test.mjs` | Language-aware safety telegrams |
+| `test/kvk.test.mjs` | KVK lookup function |
+| `test/ingest.test.mjs` | Ingestion phrasing triggers |
+| `test/eval-shape.test.mjs` | Eval set shape validation |
+| `test/disclosure.test.mjs` | Disclosure line presence |
+| `test/safety-guard.test.mjs` | Safety floor guard (hook target) |
+
+---
+
+## Live Eval
+
+The eval harness runs the 12-case eval set against the live site.
+
+**Last run:** [`eval/last_run.txt`](eval/last_run.txt)
+
+Run manually: `node eval/run.mjs https://krishi-telegram.sites.tab.bot`
 
 ---
 
