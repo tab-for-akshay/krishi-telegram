@@ -12,7 +12,7 @@ import { join, dirname } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 
-const DISCLOSURE = 'Built by Tab, an AI assistant, using Kiro, for team lead Akshay Wagh.';
+const DISCLOSURE = 'Built by Tab, an AI assistant, for team lead Akshay Wagh.';
 
 test('README.md exists', () => {
   let content;
