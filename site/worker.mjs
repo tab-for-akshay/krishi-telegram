@@ -538,6 +538,11 @@ async function handleTelegram(request, env) {
     }
     const ref = refusalTelegram(err, lang);
     if (ref) return jsonResponse(telegramReply(ref.telegram, { kvk: kvkOut(kvkMatch), refused: ref.reason, trace: traces, otari_cost_usd: sumCost(traces) }));
+    if (err.ok) {
+      // The model answered but not with a diagnosis (off-topic or a prompt-injection attempt): a polite in-character reply, not a server error.
+      const OFF = { en: 'I ANSWER ONLY FARM QUESTIONS STOP DESCRIBE YOUR CROP AND THE PROBLEM STOP', hi: 'MAIN SIRF KHETI KE SAWAL KA JAWAB DETA HOON STOP APNI FASAL AUR SAMASYA BATAYEN STOP', mr: 'MI FAKT SHETICHYA PRASHNANCHI UTTARE DETO STOP TUMCHE PEEK ANI SAMASYA SANGA STOP' };
+      return jsonResponse(telegramReply(OFF[lang] || OFF.en, { kvk: kvkOut(kvkMatch), refused: 'off_topic', trace: traces, otari_cost_usd: sumCost(traces) }));
+    }
     const t = 'SERVICE UNAVAILABLE STOP TRY AGAIN LATER STOP';
     return jsonResponse(telegramReply(t, { kvk: kvkOut(kvkMatch), error: 'Model unavailable: ' + (err.error || 'bad response'), trace: traces, otari_cost_usd: sumCost(traces) }), 502);
   }
