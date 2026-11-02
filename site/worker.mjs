@@ -196,6 +196,7 @@ export function findKvk(kvkData, state, district) {
 // ---------------------------------------------------------------------------
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+const INCEPTION_API_URL = 'https://api.inceptionlabs.ai/v1/chat/completions';
 const PRIMARY_MODEL = 'openai/gpt-oss-120b';
 const FALLBACK_MODEL = 'openai/gpt-oss-20b';
 
@@ -259,7 +260,7 @@ async function callGroqOnce(apiKey, model, userText, lang, url = GROQ_API_URL) {
       { role: 'system', content: buildSystemPrompt(lang) },
       { role: 'user', content: userText },
     ],
-    max_tokens: 1200,
+    max_tokens: isGroq ? 1200 : 3000,
     temperature: 0.3,
   });
 
@@ -327,6 +328,17 @@ async function loadKvkData(env) {
 // ---------------------------------------------------------------------------
 // Request handler
 // ---------------------------------------------------------------------------
+// Per-visitor limit (red-team fix, 2 Nov 2026): /api/telegram calls paid-for-by-quota models, so cap it.
+const RL = new Map();
+function rateLimited(request, max = 20, windowMs = 10 * 60 * 1000) {
+  const ip = (request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'anon').split(',')[0].trim();
+  const now = Date.now(); const hits = (RL.get(ip) || []).filter(t => now - t < windowMs);
+  if (hits.length >= max) { RL.set(ip, hits); return true; }
+  hits.push(now); RL.set(ip, hits);
+  if (RL.size > 5000) RL.delete(RL.keys().next().value);
+  return false;
+}
+
 async function handleTelegram(request, env) {
   let body;
   try {
@@ -381,6 +393,9 @@ async function handleTelegram(request, env) {
   const chain = lang === 'mr'
     ? [[gem, 'gemini-3.5-flash', GEMINI_API_URL], [apiKey, PRIMARY_MODEL, GROQ_API_URL], [gem, 'gemini-3.5-flash-lite', GEMINI_API_URL]]
     : [[apiKey, PRIMARY_MODEL, GROQ_API_URL], [apiKey, FALLBACK_MODEL, GROQ_API_URL], [gem, 'gemini-3.5-flash-lite', GEMINI_API_URL]];
+  // Red-team fix (2 Nov 2026): every model above shares one free daily quota; when it is used up the demo
+  // answered 502. Two more free routes on separate quotas before giving up.
+  chain.push([apiKey, 'qwen/qwen3.8-27b', GROQ_API_URL], [env?.INCEPTION_API_KEY, 'mercury-3', INCEPTION_API_URL]);
   let modelResult, modelUsed, lastErr;
   for (const [key, model, url] of chain) {
     if (!key) continue;
@@ -460,6 +475,7 @@ export default {
 
     // API route
     if (request.method === 'POST' && url.pathname === '/api/telegram') {
+      if (rateLimited(request)) return jsonResponse({ error: 'Too many telegrams from your network. Please wait a few minutes and try again.' }, 429);
       return handleTelegram(request, env);
     }
 
