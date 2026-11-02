@@ -328,12 +328,21 @@ async function loadKvkData(env) {
 // ---------------------------------------------------------------------------
 // Request handler
 // ---------------------------------------------------------------------------
-// Per-visitor limit (red-team fix, 2 Nov 2026). Counts in the site's KV store when bound (shared by every
+// Per-visitor limit (red-team fix, 2 Nov 2026). Counts in the site's D1/KV store when bound (shared by every
 // server instance), else in this instance's memory.
 const RL = new Map();
 async function rateLimited(request, env, max = 20, windowMs = 10 * 60 * 1000) {
   const ip = (request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'anon').split(',')[0].trim();
   const slot = Math.floor(Date.now() / windowMs);
+  if (env && env.DB && env.DB.prepare) {
+    try {
+      const k = ip + ':' + slot;
+      await env.DB.prepare('CREATE TABLE IF NOT EXISTS rl (k TEXT PRIMARY KEY, n INTEGER, t INTEGER)').run();
+      const row = await env.DB.prepare('INSERT INTO rl (k, n, t) VALUES (?1, 1, ?2) ON CONFLICT(k) DO UPDATE SET n = n + 1 RETURNING n').bind(k, Date.now()).first();
+      if (Math.random() < 0.02) await env.DB.prepare('DELETE FROM rl WHERE t < ?1').bind(Date.now() - 2 * windowMs).run();
+      return (row && row.n || 0) > max;
+    } catch (e) { /* fall through */ }
+  }
   if (env && env.DATA && env.DATA.get) {
     try {
       const k = 'rl:' + ip + ':' + slot; const n = parseInt(await env.DATA.get(k) || '0', 10) + 1;
