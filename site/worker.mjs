@@ -328,15 +328,22 @@ async function loadKvkData(env) {
 // ---------------------------------------------------------------------------
 // Request handler
 // ---------------------------------------------------------------------------
-// Per-visitor limit (red-team fix, 2 Nov 2026): /api/telegram calls paid-for-by-quota models, so cap it.
+// Per-visitor limit (red-team fix, 2 Nov 2026). Counts in the site's KV store when bound (shared by every
+// server instance), else in this instance's memory.
 const RL = new Map();
-function rateLimited(request, max = 20, windowMs = 10 * 60 * 1000) {
+async function rateLimited(request, env, max = 20, windowMs = 10 * 60 * 1000) {
   const ip = (request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'anon').split(',')[0].trim();
-  const now = Date.now(); const hits = (RL.get(ip) || []).filter(t => now - t < windowMs);
-  if (hits.length >= max) { RL.set(ip, hits); return true; }
-  hits.push(now); RL.set(ip, hits);
+  const slot = Math.floor(Date.now() / windowMs);
+  if (env && env.DATA && env.DATA.get) {
+    try {
+      const k = 'rl:' + ip + ':' + slot; const n = parseInt(await env.DATA.get(k) || '0', 10) + 1;
+      await env.DATA.put(k, String(n), { expirationTtl: Math.max(60, Math.ceil(windowMs / 1000) * 2) });
+      return n > max;
+    } catch (e) { /* fall through to memory */ }
+  }
+  const k = ip + ':' + slot; const n = (RL.get(k) || 0) + 1; RL.set(k, n);
   if (RL.size > 5000) RL.delete(RL.keys().next().value);
-  return false;
+  return n > max;
 }
 
 async function handleTelegram(request, env) {
@@ -475,7 +482,7 @@ export default {
 
     // API route
     if (request.method === 'POST' && url.pathname === '/api/telegram') {
-      if (rateLimited(request)) return jsonResponse({ error: 'Too many telegrams from your network. Please wait a few minutes and try again.' }, 429);
+      if (await rateLimited(request, env)) return jsonResponse({ error: 'Too many telegrams from your network. Please wait a few minutes and try again.' }, 429);
       return handleTelegram(request, env);
     }
 
